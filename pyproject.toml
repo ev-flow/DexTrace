@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dextrace"
+version = "25.10.1"
+description = "DEX/APK analyzer"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Quark Engine", email = "pulorsok@gmail.com" }]
+license = { text = "GNU General Public License v3 (GPLv3)" }
+keywords = ["android", "dex", "apk", "dalvik", "xref", "static-analysis"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Topic :: Security",
+  "Topic :: Software Development :: Libraries :: Python Modules"
+]
+
+[project.urls]
+Homepage = "https://github.com/ev-flow/dextrace"
+
+[project.scripts]
+dextrace = "dextrace.cli.main:main"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
