@@ -2,8 +2,4 @@
 # This file is part of DexTrace - https://github.com/ev-flow/DexTrace
 # See the file 'LICENSE' for copying permission.
 
-from .version import __version__
-from .apk.reader import ApkReader
-
-
-__all__ = ["__version__", "ApkReader"]
+__version__ = "25.10.1"

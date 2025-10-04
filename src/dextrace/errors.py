@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# This file is part of DexTrace - https://github.com/ev-flow/DexTrace
+# See the file 'LICENSE' for copying permission.
+
 class DexTraceError(Exception):
     """Base error for DexTrace."""
 
