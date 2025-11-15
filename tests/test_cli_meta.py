@@ -10,15 +10,27 @@ import sys
 
 
 def test_cli_meta(tmp_path, capsys):
-    apk_path = tmp_path / "demo.apk"
+    apk_path = tmp_path / "fake.apk"
     with zipfile.ZipFile(apk_path, "w") as z:
-        z.writestr("classes.dex", b"hello")
+        z.writestr("classes.dex", b"hello")  # invalid DEX, expected error
         z.writestr("AndroidManifest.xml", b"<manifest/>")
 
-    # 直接呼叫 main()
-    main(["meta", str(apk_path)])
+    # 執行 CLI：dextrace meta <path>
+    from dextrace.cli.main import main
+    exit_code = main(["meta", str(apk_path)])
+    assert exit_code == 0
 
-    out, _ = capsys.readouterr()
-    data = json.loads(out)
-    assert data["filename"] == "demo.apk"
-    assert "classes.dex" in data["dex_files"]
+    # 擷取 CLI 輸出
+    captured = capsys.readouterr().out
+    info = json.loads(captured)
+
+    assert info["filename"] == "fake.apk"
+
+    # 因為 dex_files 是 list[dict] → 不能再用 "in" 直接比對字串
+    dex_names = [d["name"] for d in info["dex_files"]]
+    assert "classes.dex" in dex_names
+
+    # 檢查錯誤正常寫入
+    entry = next(d for d in info["dex_files"] if d["name"] == "classes.dex")
+    assert "error" in entry
+    assert entry["error"].startswith("File too small")

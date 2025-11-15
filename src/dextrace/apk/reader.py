@@ -2,10 +2,13 @@
 # This file is part of DexTrace - https://github.com/ev-flow/DexTrace
 # See the file 'LICENSE' for copying permission.
 
+from pathlib import Path
 import os, zipfile, hashlib
 from typing import Dict, Generator, Tuple, Any
 from ..manifest.axml_parser import ManifestInspector
 from ..errors import BadAxmlFormat
+from ..dex.dex_header import parse_dex_header
+
 
 class ApkReader:
     """Read basic information and dex files from an APK."""
@@ -24,7 +27,7 @@ class ApkReader:
             "sha1": self._calc_hash("sha1"),
             "sha256": self._calc_hash("sha256"),
             "entries": self._zip.namelist(),
-            "dex_files": sorted([f for f in self._zip.namelist() if f.endswith(".dex")]),
+            "dex_files": list(),
         }
 
         if "AndroidManifest.xml" in info["entries"]:
@@ -37,6 +40,28 @@ class ApkReader:
 
         else:
             info["manifest"] = {"error": "No manifest found"}
+
+        # --- Parse DEX headers ---
+        dex_entries = sorted([f for f in info["entries"] if f.endswith(".dex")])
+        for dex_name in dex_entries:
+            with self._zip.open(dex_name) as f:
+                raw = f.read()
+                tmp_path = Path(f"/tmp/{dex_name}")
+                tmp_path.write_bytes(raw)
+
+                try:
+                    header = parse_dex_header(str(tmp_path))
+                    info["dex_files"].append({
+                        "name": dex_name,
+                        "header": header.to_dict(),
+                    })
+                except Exception as e:
+                    info["dex_files"].append({
+                        "name": dex_name,
+                        "error": str(e),
+                    })
+                finally:
+                    tmp_path.unlink(missing_ok=True)
 
         return info
 
