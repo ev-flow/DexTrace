@@ -2,35 +2,67 @@
 # This file is part of DexTrace - https://github.com/ev-flow/DexTrace
 # See the file 'LICENSE' for copying permission.
 
-import argparse, sys, json
-from ..version import __version__
-from ..apk.reader import ApkReader
 
-def cmd_meta(args: argparse.Namespace) -> int:
-    reader = ApkReader(args.apk_path)
-    info = reader.get_info()
-    print(json.dumps(info, indent=2))
-    return 0
+import sys
+import argparse
+from dextrace.version import __version__
+
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         prog="dextrace",
-        description="DexTrace — DEX/APK parsing & call-tracing core",
+        description="DexTrace — DEX/APK parsing & static metadata extraction",
     )
-    p.add_argument("-V", "--version", action="version", version=f"DexTrace {__version__}")
 
-    sub = p.add_subparsers(dest="command", required=True)
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"DexTrace {__version__}",
+    )
 
-    p_meta = sub.add_parser("meta", help="Show APK basic info")
-    p_meta.add_argument("apk_path", help="Path to the APK file")
-    p_meta.set_defaults(func=cmd_meta)
+    subparsers = parser.add_subparsers(dest="command", metavar="")
 
-    return p
+    # -------------------------
+    # meta subcommand
+    # -------------------------
+    from . import cmd_meta  # Import NEW version with error handling
 
-def main(argv=None) -> int:
+    p_meta = subparsers.add_parser(
+        "meta",
+        help="Show basic static metadata for an APK (hashes, manifest, DEX headers)",
+    )
+    cmd_meta.register(p_meta)  # <<<<< KEY: use new cmd_meta.register()
+
+    return parser
+
+
+def main(argv=None):
     parser = build_parser()
-    args = parser.parse_args(argv)
-    return args.func(args)
+
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Catch argparse SystemExit for --help/--version
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as e:
+        return e.code if isinstance(e.code, int) else 0
+
+    # Dispatch subcommand
+    handler = getattr(args, "func", None)
+
+    if callable(handler):
+        try:
+            rc = handler(args)
+        except SystemExit as e:
+            return e.code if isinstance(e.code, int) else 0
+        return rc if isinstance(rc, int) else 0
+
+    # No subcommand given
+    parser.print_help()
+    return 2
+
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

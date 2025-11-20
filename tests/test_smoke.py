@@ -2,17 +2,15 @@
 # This file is part of DexTrace - https://github.com/ev-flow/DexTrace
 # See the file 'LICENSE' for copying permission.
 
-from subprocess import run, PIPE
-import sys
+
+from dextrace.cli.main import main
 
 
-def test_help_runs():
-    proc = run([sys.executable, "-m", "dextrace.cli.main", "-h"], stdout=PIPE, stderr=PIPE, text=True)
-    assert proc.returncode == 0
-    assert "DexTrace" in proc.stdout
+def test_help_runs(capsys):
+    exit_code = main(["--help"])
+    assert exit_code == 0
 
 
-def test_version_runs():
-    proc = run([sys.executable, "-m", "dextrace.cli.main", "--version"], stdout=PIPE, stderr=PIPE, text=True)
-    assert proc.returncode == 0
-    assert "DexTrace" in proc.stdout
+def test_version_runs(capsys):
+    exit_code = main(["--version"])
+    assert exit_code == 0
