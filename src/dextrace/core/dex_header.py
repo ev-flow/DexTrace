@@ -7,16 +7,22 @@
 DEX header parsing.
 """
 
+from __future__ import annotations
+
 import struct
 from dataclasses import dataclass, asdict
-from typing import Optional, Dict
+from typing import Dict, Any
 
 
 DEX_HEADER_STRUCT = "<8sI20s20I"
 DEX_HEADER_SIZE = 0x70
 
 
-@dataclass
+class DexFormatError(ValueError):
+    """Raised when DEX header format is invalid."""
+
+
+@dataclass(frozen=True)
 class DexHeader:
     magic: str
     checksum: int
@@ -43,28 +49,40 @@ class DexHeader:
     data_off: int
 
     def version(self) -> str:
+        # dex\n035\0 → 035
         return self.magic[4:7]
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         d["version"] = self.version()
         return d
 
+    @classmethod
+    def from_bytes(cls, data: bytes) -> "DexHeader":
+        return parse_dex_header_bytes(data)
 
-def parse_dex_header(file_path=None, data=None) -> DexHeader:
-    if data is None:
-        data = open(file_path, "rb").read()
 
+# ----------------------------------------------------------------------
+# Parsers
+# ----------------------------------------------------------------------
+def parse_dex_header_bytes(data: bytes) -> DexHeader:
+    """
+    Parse DEX header from raw bytes.
+    """
     if len(data) < DEX_HEADER_SIZE:
-        raise ValueError("File too small to contain a valid DEX header")
+        raise DexFormatError("File too small to contain a valid DEX header")
 
-    unpacked = struct.unpack(DEX_HEADER_STRUCT, data[:DEX_HEADER_SIZE])
+    try:
+        unpacked = struct.unpack(DEX_HEADER_STRUCT, data[:DEX_HEADER_SIZE])
+    except struct.error as exc:
+        raise DexFormatError("Failed to unpack DEX header") from exc
+
     magic = unpacked[0].decode("ascii", "replace")
 
     if not (magic.startswith("dex\n") or magic.startswith("cdex\n")):
-        raise ValueError(f"Invalid DEX magic: {magic!r}")
+        raise DexFormatError(f"Invalid DEX magic: {magic!r}")
 
-    fields = DexHeader(
+    return DexHeader(
         magic=magic,
         checksum=unpacked[1],
         signature=unpacked[2].hex(),
@@ -89,4 +107,30 @@ def parse_dex_header(file_path=None, data=None) -> DexHeader:
         data_size=unpacked[21],
         data_off=unpacked[22],
     )
-    return fields
+
+
+def parse_dex_header_file(path: str) -> DexHeader:
+    """
+    Parse DEX header from a file path.
+    """
+    with open(path, "rb") as f:
+        return parse_dex_header_bytes(f.read())
+
+
+# ----------------------------------------------------------------------
+# Backward compatibility
+# ----------------------------------------------------------------------
+def parse_dex_header(file_path=None, data=None) -> DexHeader:
+    """
+    Backward-compatible wrapper.
+
+    - parse_dex_header(file_path="classes.dex")
+    - parse_dex_header(data=b"...")
+    """
+    if data is not None:
+        return parse_dex_header_bytes(data)
+
+    if file_path is not None:
+        return parse_dex_header_file(file_path)
+
+    raise TypeError("parse_dex_header requires file_path or data")

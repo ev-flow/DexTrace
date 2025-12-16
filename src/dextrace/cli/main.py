@@ -7,6 +7,8 @@ import sys
 import argparse
 from dextrace.version import __version__
 
+from dextrace.cli import cmd_meta
+from dextrace.cli import cmd_dex
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -26,13 +28,22 @@ def build_parser() -> argparse.ArgumentParser:
     # -------------------------
     # meta subcommand
     # -------------------------
-    from . import cmd_meta  # Import NEW version with error handling
 
     p_meta = subparsers.add_parser(
         "meta",
         help="Show basic static metadata for an APK (hashes, manifest, DEX headers)",
     )
     cmd_meta.register(p_meta)  # <<<<< KEY: use new cmd_meta.register()
+
+    # -------------------------
+    # dex subcommand
+    # -------------------------
+
+    p_dex = subparsers.add_parser(
+        "dex",
+        help="Show dex info for an APK",
+    )
+    cmd_dex.register(p_dex)
 
     return parser
 
