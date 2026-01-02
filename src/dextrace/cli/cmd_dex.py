@@ -19,8 +19,13 @@ def register(parser: ArgumentParser) -> None:
 
     parser.add_argument("--header", action="store_true", help="Show DEX header information only")
     parser.add_argument("--summary", action="store_true", help="Show basic DEX summary (default)")
-    parser.add_argument("--apis", action="store_true", help="Extract invoke-* API calls from classes.dex")
+     # Stage 2
+    parser.add_argument("--apis", action="store_true", help="Extract invoke-* API calls (Stage 2)")
     parser.add_argument("--limit", type=int, default=0, help="Limit number of API calls (0 = no limit)")
+    # Stage 3 & 4
+    parser.add_argument("--api-sets", action="store_true", help="Extract per-method API sets (Stage 3)")
+    parser.add_argument("--api-seq", action="store_true", help="Extract per-method API call sequences (Stage 4)")
+
     parser.add_argument("--json", action="store_true", help="Output structured JSON")
 
     parser.set_defaults(func=run)
@@ -35,16 +40,23 @@ def run(args: Namespace) -> int:
         raise SystemExit("[-] APK does not contain classes.dex") from exc
 
     header = DexHeader.from_bytes(dex_data)
+    extractor = DexApiExtractor(dex_data)
 
-    # default behavior
-    want_summary = args.summary or (not args.header and not args.apis)
+    want_summary = args.summary or (
+        not args.header and not args.apis and not args.api_sets and not args.api_seq
+    )
 
+    # -------------------------
+    # Header
+    # -------------------------
     if args.header:
         payload = {"dex": {"header": header.to_dict()}}
         return _emit(payload, as_json=args.json, fallback_print=_print_header)
 
+    # -------------------------
+    # Stage 2 – API calls
+    # -------------------------
     if args.apis:
-        extractor = DexApiExtractor(dex_data)
         limit = args.limit if args.limit and args.limit > 0 else None
         calls = extractor.extract_api_calls(limit=limit)
 
@@ -57,6 +69,37 @@ def run(args: Namespace) -> int:
         }
         return _emit(payload, as_json=args.json, fallback_print=lambda p: _print_api_calls(p["dex"]["api_calls"]))
 
+    # -------------------------
+    # Stage 3 – API sets
+    # -------------------------
+    if args.api_sets:
+        api_sets = extractor.extract_api_sets()
+
+        payload = {
+            "dex": {
+                "summary": _summary_dict(header),
+                "api_sets": api_sets,
+            }
+        }
+        return _emit(payload, as_json=args.json, fallback_print=_print_api_sets)
+
+    # -------------------------
+    # Stage 4 – API sequences
+    # -------------------------
+    if args.api_seq:
+        api_seq = extractor.extract_api_sequences()
+
+        payload = {
+            "dex": {
+                "summary": _summary_dict(header),
+                "api_sequences": api_seq,
+            }
+        }
+        return _emit(payload, as_json=args.json, fallback_print=_print_api_sequences)
+
+    # -------------------------
+    # Default summary
+    # -------------------------
     if want_summary:
         payload = {"dex": {"summary": _summary_dict(header)}}
         return _emit(payload, as_json=args.json, fallback_print=_print_summary)
@@ -68,7 +111,8 @@ def _emit(payload: Dict[str, Any], as_json: bool, fallback_print) -> int:
     if as_json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
-    fallback_print(payload)
+    else:
+        fallback_print(payload)
     return 0
 
 
@@ -107,7 +151,7 @@ def _print_summary(payload: Dict[str, Any]) -> None:
 
 
 def _print_api_calls(api_calls: List[Dict[str, Any]]) -> None:
-    print("DEX API Calls (invoke-*)")
+    print("DEX API Calls (Stage 2)")
     print("-" * 60)
     for item in api_calls:
         caller = item["caller"]
@@ -118,3 +162,25 @@ def _print_api_calls(api_calls: List[Dict[str, Any]]) -> None:
             f'{caller["class"]}->{caller["method"]}{caller["proto"]}  ->  '
             f'{callee["class"]}->{callee["method"]}{callee["proto"]}'
         )
+
+def _print_api_sets(payload: Dict[str, Any]) -> None:
+    api_sets = payload["dex"]["api_sets"]
+    print("DEX API Sets (Stage 3)")
+    print("-" * 60)
+    for method, apis in api_sets.items():
+        print(method)
+        for api in apis:
+            print(f"  - {api}")
+        print()
+
+
+def _print_api_sequences(payload: Dict[str, Any]) -> None:
+    api_seq = payload["dex"]["api_sequences"]
+    print("DEX API Sequences (Stage 4)")
+    print("-" * 60)
+    for method, seq in api_seq.items():
+        print(method)
+        for item in seq:
+            print(
+                f'  @ {item["offset"]:>6}  {item["invoke"]:22} -> {item["callee"]}'
+            )

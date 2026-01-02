@@ -46,6 +46,17 @@ class ApiCall:
         }
 
 
+
+@dataclass
+class MethodApiTrace:
+    """
+    Stage 3 + 4 carrier structure.
+    """
+    method: str
+    api_set: List[str]
+    api_sequence: List[dict]
+
+
 # invoke-kind opcodes (common)
 INVOKE_OPCODES: Dict[int, str] = {
     0x6E: "invoke-virtual",
@@ -64,10 +75,6 @@ INVOKE_OPCODES: Dict[int, str] = {
 class DexApiExtractor:
     """
     Extract API calls by scanning code_item instructions and resolving method_id items.
-
-    Notes:
-    - This is a "best-effort" extractor: invalid indexes won't crash; they are skipped.
-    - It does not require full semantic decoding; only invoke opcodes are recognized.
     """
 
     def __init__(self, dex_data: bytes) -> None:
@@ -116,6 +123,64 @@ class DexApiExtractor:
                     return calls
 
         return calls
+
+    # ------------------------------------------------------------------
+    # Stage 3 – API sets per method
+    # ------------------------------------------------------------------
+    def extract_api_sets(self) -> Dict[str, List[str]]:
+        result: Dict[str, set] = {}
+
+        for method_idx, code_off in self._iter_all_methods_code_off():
+            caller = self._get_method(method_idx)
+            if not caller:
+                continue
+
+            method_sig = self._format_method_sig(*caller)
+            result.setdefault(method_sig, set())
+
+            for _, _, callee_idx in self._iter_invokes(code_off):
+                callee = self._get_method(callee_idx)
+                if not callee:
+                    continue
+                result[method_sig].add(self._format_method_sig(*callee))
+
+        return {k: sorted(v) for k, v in result.items()}
+
+    # ------------------------------------------------------------------
+    # Stage 4 – API call sequences per method
+    # ------------------------------------------------------------------
+    def extract_api_sequences(self) -> Dict[str, List[dict]]:
+        result: Dict[str, List[dict]] = {}
+
+        for method_idx, code_off in self._iter_all_methods_code_off():
+            caller = self._get_method(method_idx)
+            if not caller:
+                continue
+
+            method_sig = self._format_method_sig(*caller)
+            result.setdefault(method_sig, [])
+
+            for invoke, offset, callee_idx in self._iter_invokes(code_off):
+                callee = self._get_method(callee_idx)
+                if not callee:
+                    continue
+
+                result[method_sig].append(
+                    {
+                        "offset": offset,
+                        "invoke": invoke,
+                        "callee": self._format_method_sig(*callee),
+                    }
+                )
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _format_method_sig(cls: str, name: str, proto: str) -> str:
+        return f"{cls}->{name}{proto}"
 
     # ------------------------------------------------------------------
     # Class/method iteration (class_data_item)
