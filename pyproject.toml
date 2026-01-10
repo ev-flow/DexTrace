@@ -2,6 +2,12 @@
 requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"dextrace.dalvik.data" = ["bytecode.txt"]
+
 [project]
 name = "dextrace"
 version = "25.10.1"

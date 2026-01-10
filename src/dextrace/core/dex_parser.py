@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
-from typing import Dict, Iterable, List
+from typing import Iterable, List, Tuple, Iterator
 
 
 # ----------------------------------------------------------------------
@@ -17,19 +17,7 @@ class DexFormatError(ValueError):
     """Raised when DEX bytecode format is invalid."""
 
 
-# ----------------------------------------------------------------------
-# Data structures
-# ----------------------------------------------------------------------
-@dataclass
-class DexInstruction:
-    """Single Dalvik instruction (raw)."""
-
-    offset: int          # offset from code_item.insns
-    opcode: int
-    raw: bytes
-
-
-@dataclass
+@dataclass(frozen=True)
 class DexCode:
     """DEX code_item structure (no try/catch decoding yet)."""
 
@@ -43,37 +31,12 @@ class DexCode:
 
 
 # ----------------------------------------------------------------------
-# Opcode table (minimal – extensible)
-# ----------------------------------------------------------------------
-DALVIK_OPCODES: Dict[int, str] = {
-    0x00: "nop",
-    0x01: "move",
-    0x02: "move/from16",
-    0x03: "move/16",
-    0x04: "move-wide",
-    0x0e: "return-void",
-    0x0f: "return",
-    0x10: "return-wide",
-    0x11: "return-object",
-    0x12: "const/4",
-    0x13: "const/16",
-    0x14: "const",
-    0x28: "goto",
-    0x29: "goto/16",
-    0x2a: "goto/32",
-}
-
-
-# ----------------------------------------------------------------------
 # Parser
 # ----------------------------------------------------------------------
 class DexParser:
     """
     DEX bytecode parser focused on code_item.
-
-    This parser assumes:
-    - DEX header & method resolution is handled elsewhere
-    - caller provides code_item offset
+    Disassembly/format decoding is handled in dextrace.dalvik.
     """
 
     def __init__(self, dex_data: bytes) -> None:
@@ -113,7 +76,7 @@ class DexParser:
             raise DexFormatError("Failed to unpack code_item header") from err
 
         insns_off = offset + 16
-        insns_bytes = insns_size * 2
+        insns_bytes = int(insns_size) * 2
 
         if insns_off + insns_bytes > self._size:
             raise DexFormatError("code_item instruction area truncated")
@@ -121,56 +84,55 @@ class DexParser:
         insns = self._data[insns_off: insns_off + insns_bytes]
 
         return DexCode(
-            registers_size=registers_size,
-            ins_size=ins_size,
-            outs_size=outs_size,
-            tries_size=tries_size,
-            debug_info_off=debug_info_off,
-            insns_size=insns_size,
+            registers_size=int(registers_size),
+            ins_size=int(ins_size),
+            outs_size=int(outs_size),
+            tries_size=int(tries_size),
+            debug_info_off=int(debug_info_off),
+            insns_size=int(insns_size),
             insns=insns,
         )
 
-    # ------------------------------------------------------------------
-    # Instruction decoding
-    # ------------------------------------------------------------------
-    def iter_instructions(self, code: DexCode) -> Iterable[DexInstruction]:
+    def read_code_units(self, code: DexCode) -> List[int]:
         """
-        Iterate raw Dalvik instructions.
-
-        NOTE:
-        - This is a *lightweight* decoder
-        - No format-based operand decoding yet
+        Return all 16-bit code units as a list (little-endian).
+        Length == code.insns_size.
         """
-
-        insns = code.insns
-        off = 0
-        size = len(insns)
-
-        while off + 2 <= size:
-            opcode = insns[off]
-            raw = insns[off: off + 2]
-
-            yield DexInstruction(
-                offset=off,
-                opcode=opcode,
-                raw=raw,
+        expected = code.insns_size * 2
+        if len(code.insns) != expected:
+            raise DexFormatError(
+                f"insns length mismatch: got={len(code.insns)} expected={expected}"
             )
 
-            off += 2
+        if code.insns_size == 0:
+            return []
 
-    # ------------------------------------------------------------------
-    # Disassembly
-    # ------------------------------------------------------------------
-    def disassemble(self, code: DexCode) -> str:
+        # struct unpack expects an int count
+        return list(struct.unpack_from(f"<{int(code.insns_size)}H", code.insns, 0))
+
+    def iter_code_units(self, code: DexCode) -> Iterable[Tuple[int, int]]:
         """
-        Return simple text disassembly of code_item.
+        Yield (uoff, u16) where uoff is offset in 16-bit code units.
         """
+        for i, u in enumerate(self.read_code_units(code)):
+            yield i, u
 
-        lines: List[str] = []
+    def iter_code_units_fast(self, code: DexCode) -> Iterator[Tuple[int, int]]:
+        """
+        Yield (uoff, u16) without allocating a list.
+        Prefer this for very large methods.
+        """
+        expected = code.insns_size * 2
+        if len(code.insns) != expected:
+            raise DexFormatError(
+                f"insns length mismatch: got={len(code.insns)} expected={expected}"
+            )
 
-        for ins in self.iter_instructions(code):
-            name = DALVIK_OPCODES.get(ins.opcode, f"op_{ins.opcode:02x}")
-            raw_hex = ins.raw.hex()
-            lines.append(f"{ins.offset:04x}: {name:<15} ; {raw_hex}")
+        for i in range(int(code.insns_size)):
+            yield i, struct.unpack_from("<H", code.insns, i * 2)[0]
 
-        return "\n".join(lines)
+
+    def parse_code_item_at(self, offset: int) -> Tuple[DexCode, int]:
+        """Return (code, insns_off) where insns_off == offset + 16."""
+        code = self.parse_code_item(offset)
+        return code, offset + 16

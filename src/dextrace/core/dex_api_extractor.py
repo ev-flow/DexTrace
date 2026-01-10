@@ -26,6 +26,7 @@ class ApiCall:
     callee_class: str
     callee_method: str
     callee_proto: str
+    registers: List[str]
 
     def to_dict(self) -> dict:
         return {
@@ -37,6 +38,7 @@ class ApiCall:
             "invoke": {
                 "opcode": self.invoke,
                 "offset": self.invoke_offset,
+                "registers": self.registers,
             },
             "callee": {
                 "class": self.callee_class,
@@ -44,7 +46,6 @@ class ApiCall:
                 "proto": self.callee_proto,
             },
         }
-
 
 
 @dataclass
@@ -100,7 +101,7 @@ class DexApiExtractor:
                 continue
             caller_cls, caller_name, caller_proto = caller
 
-            for inv_name, insn_off, callee_idx in self._iter_invokes(code_off):
+            for inv_name, insn_off, callee_idx, regs in self._iter_invokes(code_off):
                 callee = self._get_method(callee_idx)
                 if not callee:
                     continue
@@ -116,10 +117,11 @@ class DexApiExtractor:
                         callee_class=callee_cls,
                         callee_method=callee_name,
                         callee_proto=callee_proto,
+                        registers=regs,
                     )
                 )
 
-                if limit is not None and len(calls) >= limit:
+                if limit and len(calls) >= limit:
                     return calls
 
         return calls
@@ -138,7 +140,7 @@ class DexApiExtractor:
             method_sig = self._format_method_sig(*caller)
             result.setdefault(method_sig, set())
 
-            for _, _, callee_idx in self._iter_invokes(code_off):
+            for _, _, callee_idx, _ in self._iter_invokes(code_off):
                 callee = self._get_method(callee_idx)
                 if not callee:
                     continue
@@ -160,7 +162,7 @@ class DexApiExtractor:
             method_sig = self._format_method_sig(*caller)
             result.setdefault(method_sig, [])
 
-            for invoke, offset, callee_idx in self._iter_invokes(code_off):
+            for invoke, offset, callee_idx, _ in self._iter_invokes(code_off):
                 callee = self._get_method(callee_idx)
                 if not callee:
                     continue
@@ -221,45 +223,182 @@ class DexApiExtractor:
 
         # skip encoded_field for static+instance
         for _ in range((static_fields_size or 0) + (instance_fields_size or 0)):
-            _, p = self._read_uleb128_safe(p)
+            _, p = self._read_uleb128_safe(p)  # field_idx_diff
             if p is None:
                 return
-            _, p = self._read_uleb128_safe(p)
-            if p is None:
-                return
-
-        # encoded_method: method_idx_diff, access_flags, code_off
-        method_idx = 0
-        for _ in range((direct_methods_size or 0) + (virtual_methods_size or 0)):
-            diff, p = self._read_uleb128_safe(p)
-            if p is None:
-                return
-            method_idx += int(diff or 0)
-
             _, p = self._read_uleb128_safe(p)  # access_flags
             if p is None:
                 return
 
-            code_off, p = self._read_uleb128_safe(p)
-            if p is None:
-                return
+        def _iter_methods(n: int) -> Iterable[Tuple[int, int]]:
+            nonlocal p
+            method_idx = 0  # IMPORTANT: reset per list (direct / virtual)
+            for _ in range(int(n or 0)):
+                diff, p2 = self._read_uleb128_safe(p)
+                if p2 is None:
+                    return
+                p = p2
+                method_idx += int(diff or 0)
 
-            if code_off:
-                yield method_idx, int(code_off)
+                _, p2 = self._read_uleb128_safe(p)  # access_flags
+                if p2 is None:
+                    return
+                p = p2
 
-    # ------------------------------------------------------------------
-    # code_item + invoke scan
-    # ------------------------------------------------------------------
-    def _iter_invokes(self, code_off: int) -> Iterable[Tuple[str, int, int]]:
+                code_off, p2 = self._read_uleb128_safe(p)
+                if p2 is None:
+                    return
+                p = p2
+
+                if code_off:
+                    yield method_idx, int(code_off)
+
+        # direct list
+        yield from _iter_methods(direct_methods_size or 0)
+        # virtual list (reset happens inside _iter_methods)
+        yield from _iter_methods(virtual_methods_size or 0)
+
+    @staticmethod
+    def _payload_width_units(insns: bytes, uoff: int, total_units: int) -> int:
         """
-        Yield (invoke_name, insn_byte_offset_from_code_insns, callee_method_idx)
+        Handle opcode==0x00 payloads:
+        packed-switch-payload (0x0100), sparse-switch-payload (0x0200),
+        fill-array-data-payload (0x0300)
+        Return payload size in 16-bit code units.
+        """
+        byte_off = uoff * 2
+        if byte_off + 2 > len(insns):
+            return 1
+
+        ident = struct.unpack_from("<H", insns, byte_off)[0]
+
+        # packed-switch-payload
+        if ident == 0x0100:
+            # u2 ident, u2 size, u4 first_key, u4 targets[size]
+            if byte_off + 4 > len(insns):
+                return 1
+            size = struct.unpack_from("<H", insns, byte_off + 2)[0]
+            units = 4 + (size * 2)  # 2(header) + 2(first_key) + 2*size(targets)
+            return max(1, min(units, total_units - uoff))
+
+        # sparse-switch-payload
+        if ident == 0x0200:
+            # u2 ident, u2 size, u4 keys[size], u4 targets[size]
+            if byte_off + 4 > len(insns):
+                return 1
+            size = struct.unpack_from("<H", insns, byte_off + 2)[0]
+            units = 2 + (size * 4)  # 2(header) + 2*size(keys) + 2*size(targets)
+            return max(1, min(units, total_units - uoff))
+
+        # fill-array-data-payload
+        if ident == 0x0300:
+            # u2 ident, u2 element_width, u4 size, u1 data[size*element_width], padding
+            if byte_off + 8 > len(insns):
+                return 1
+            element_width = struct.unpack_from("<H", insns, byte_off + 2)[0]
+            size = struct.unpack_from("<I", insns, byte_off + 4)[0]
+            data_bytes = int(size) * int(element_width)
+            data_units = (data_bytes + 1) // 2  # round up to 16-bit units
+            units = 4 + data_units  # 4 units header + data
+            return max(1, min(units, total_units - uoff))
+
+        return 1
+
+    @staticmethod
+    def _insn_width_units(opcode: int, insns: bytes, uoff: int, total_units: int) -> int:
+        """
+        Return instruction width in 16-bit code units (not bytes).
+        This is a pragmatic table covering common Dalvik opcodes.
+        Unknown opcodes default to 1 to avoid infinite loops.
+        """
+        # payloads are encoded as opcode 0x00 (nop) with ident in high byte
+        if opcode == 0x00:
+            return DexApiExtractor._payload_width_units(insns, uoff, total_units)
+
+        # 5 units
+        if opcode == 0x18:  # const-wide (51l)
+            return 5
+
+        # 4 units (rare but valid: invoke-polymorphic/custom)
+        if opcode in (0xFA, 0xFB, 0xFC, 0xFD):  # 45cc / 4rcc
+            return 4
+
+        # 3 units
+        if opcode in (
+            0x03, 0x06, 0x09,        # move/16, move-wide/16, move-object/16 (32x)
+            0x14, 0x17,              # const (31i), const-wide/32 (31i)
+            0x1B,                    # const-string/jumbo (31c)
+            0x26,                    # fill-array-data (31t)
+            0x2A,                    # goto/32 (30t)
+            0x2B, 0x2C,              # packed-switch, sparse-switch (31t)
+        ):
+            return 3
+
+        # invokes are always 3 units in classic formats
+        if opcode in (0x6E, 0x6F, 0x70, 0x71, 0x72, 0x74, 0x75, 0x76, 0x77, 0x78):
+            return 3
+
+        # 2 units (a lot of opcodes)
+        if opcode in (
+            0x01,                    # move (12x) actually 1, keep out
+        ):
+            return 1
+
+        width2 = set()
+
+        # move/from16, move-wide/from16, move-object/from16 (22x)
+        width2.update([0x02, 0x05, 0x08])
+
+        # move-result*, return*, throw (11x) are 1; don't add
+
+        # const/4 is 1; const/16, const-wide/16, const/high16 etc are 2
+        width2.update([0x13, 0x15, 0x16, 0x19, 0x1C, 0x1D])
+
+        # const-string, const-class, check-cast, instance-of, new-instance (21c / 22c)
+        width2.update([0x1A, 0x1C, 0x1F, 0x20, 0x22])
+
+        # new-array, filled-new-array (22c/35c) -> new-array is 2, filled-new-array is 3 (0x24 handled by default 1; you can add if needed)
+        width2.update([0x23])
+
+        # iget/iput (22c)
+        width2.update(list(range(0x52, 0x60)))
+
+        # sget/sput (21c)
+        width2.update(list(range(0x60, 0x6E)))
+
+        # invoke-xxx are 3 already
+
+        # if-* (22t / 21t)
+        width2.update(list(range(0x32, 0x3E)))
+
+        # goto/16 (20t)
+        width2.update([0x29])
+
+        # aget/aput (23x)
+        width2.update(list(range(0x44, 0x52)))
+
+        # arithmetic 23x / 12x mix; include common 23x comparisons
+        width2.update(list(range(0x2D, 0x32)))  # cmpl/cmpg/cmp-long etc are 2
+
+        # add-int/lit16 etc (22s) and lit8 (22b)
+        width2.update(list(range(0xD0, 0xE3)))  # lit16/lit8 family are 2
+
+        if opcode in width2:
+            return 2
+
+        # default
+        return 1
+
+    # ------------------------------------------------------------------
+    # code_item + invoke scan + register extraction
+    # ------------------------------------------------------------------
+    def _iter_invokes(self, code_off: int) -> Iterable[Tuple[str, int, int, List[str]]]:
+        """
+        Yield (invoke_name, insn_byte_offset_from_code_insns, callee_method_idx, regs)
         """
         if code_off <= 0 or code_off + 16 > self._size:
             return
 
-        # code_item:
-        # u2 registers_size, u2 ins_size, u2 outs_size, u2 tries_size,
-        # u4 debug_info_off, u4 insns_size, u2 insns[insns_size]
         insns_size = self._u32(code_off + 12)
         if insns_size is None:
             return
@@ -271,26 +410,66 @@ class DexApiExtractor:
 
         insns = self._data[insns_off : insns_off + insns_bytes]
 
-        # iterate in 16-bit code units; decode only invoke formats
         uoff = 0
         total_units = int(insns_size)
+
         while uoff < total_units:
             byte_off = uoff * 2
             if byte_off + 2 > len(insns):
                 return
 
             opcode = insns[byte_off]
+            width = self._insn_width_units(opcode, insns, uoff, total_units)
+            if width <= 0:
+                width = 1
+
             if opcode not in INVOKE_OPCODES:
-                uoff += 1
+                uoff += width
                 continue
 
-            # invoke-xxx (35c) and invoke-xxx/range (3rc) are 3 code units
+            name = INVOKE_OPCODES[opcode]
+
+            # -------------------------
+            # invoke-xxx (35c) : 3 units
+            # -------------------------
+            if opcode <= 0x72:
+                if uoff + 2 >= total_units:
+                    return
+
+                first = struct.unpack_from("<H", insns, byte_off)[0]
+                A = (first >> 12) & 0xF  # reg_count
+                G = (first >> 8) & 0xF   # 5th register (only if A==5)
+
+                method_idx = struct.unpack_from("<H", insns, (uoff + 1) * 2)[0]
+                regs_word = struct.unpack_from("<H", insns, (uoff + 2) * 2)[0]
+
+                C = (regs_word >> 0) & 0xF
+                D = (regs_word >> 4) & 0xF
+                E = (regs_word >> 8) & 0xF
+                F = (regs_word >> 12) & 0xF
+                regs_all = [C, D, E, F, G]
+                regs = [f"v{r}" for r in regs_all[:A]]
+
+                # alignment guard: invalid method_idx => likely misaligned; skip as noise
+                if method_idx < self._header.method_ids_size:
+                    yield name, byte_off, method_idx, regs
+
+                uoff += 3
+                continue
+
+            # -------------------------
+            # invoke-xxx/range (3rc) : 3 units
+            # -------------------------
             if uoff + 2 >= total_units:
                 return
 
-            # method_idx is always the 2nd code unit for invoke-* (BBBB)
+            reg_count = insns[byte_off + 1]
             method_idx = struct.unpack_from("<H", insns, (uoff + 1) * 2)[0]
-            yield INVOKE_OPCODES[opcode], byte_off, int(method_idx)
+            start_reg = struct.unpack_from("<H", insns, (uoff + 2) * 2)[0]
+            regs = [f"v{start_reg + i}" for i in range(reg_count)]
+
+            if method_idx < self._header.method_ids_size:
+                yield name, byte_off, method_idx, regs
 
             uoff += 3
 

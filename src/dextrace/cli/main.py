@@ -9,6 +9,8 @@ from dextrace.version import __version__
 
 from dextrace.cli import cmd_meta
 from dextrace.cli import cmd_dex
+from dextrace.cli import cmd_disasm
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -44,6 +46,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show dex info for an APK",
     )
     cmd_dex.register(p_dex)
+
+    # -------------------------
+    # disasm
+    # -------------------------
+    p_disasm = subparsers.add_parser(
+        "disasm",
+        help="Disassemble specified methods and output JSON for Quark stage-5.",
+    )
+    cmd_disasm.register(p_disasm)
 
     return parser
 
