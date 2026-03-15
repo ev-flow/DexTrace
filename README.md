@@ -8,18 +8,31 @@ Instead, DexTrace focuses on producing a **clean, standardized, and reproducible
 - APK metadata
 - AndroidManifest structure
 - DEX internal tables
-- Cross-references (XREF) between methods and APIs
+- API call evidence and method-level cross-references (XREF)
 
 These results are designed to be **consumed by higher-level engines**, such as  
 👉 [Quark Engine](https://github.com/ev-flow/quark-engine) or other static / hybrid analysis frameworks.
 
 ---
 
+## Goals
+
+DexTrace is intended to provide:
+
+- lightweight APK and DEX parsing without depending on a full Android analysis framework
+- deterministic Dalvik bytecode disassembly and inspection
+- structured API extraction from DEX bytecode
+- manifest and APK metadata parsing
+- a Python API and CLI for inspection, debugging, and integration
+- reproducible outputs suitable for downstream rule engines
+
+
 ## ✨ Current Features
 
 ### APK Support
 - File hashes (MD5 / SHA1 / SHA256)
 - File size and ZIP entries
+- APK archive reading for downstream parsing workflows
 
 ### AndroidManifest Parsing
 - Supports **binary AXML** and **plain XML**
@@ -39,9 +52,10 @@ These results are designed to be **consumed by higher-level engines**, such as
 
 ### DEX Bytecode Parsing (Core)
 - `code_item` parsing
-- Instruction iteration
-- Offset-aware bytecode handling
-- Designed to scale toward control-flow & data-flow analysis
+- instruction iteration
+- offset-aware bytecode handling
+- method/code mapping support
+- designed to scale toward richer control-flow or data-flow analysis later
 
 ---
 
@@ -51,37 +65,112 @@ DexTrace implements **progressive API tracing stages** aligned with
 **Quark Engine’s 5-stage detection model**.
 
 ### Stage 2 – API Calls
-- Extracts all `invoke-*` instructions
-- Resolves:
+- extracts all `invoke-*` instructions
+- resolves:
   - caller class / method / prototype
   - callee class / method / prototype
   - opcode type and bytecode offset
-- Produces **structured XREF output**
-- Safe against malformed indices and corrupted tables
+- produces **structured XREF output**
+- safe against malformed indices and corrupted tables
 
 ### Stage 3 – API Sets (Per Method)
-- Groups APIs **per caller method**
-- Represents *which APIs are used together*
-- Order-independent
-- Designed for **combination-based rule matching**
+- groups APIs **per caller method**
+- represents *which APIs are used together*
+- order-independent
+- designed for **combination-based rule matching**
 
 ### Stage 4 – API Call Sequences
-- Preserves **static call order** within each method
-- Offset-aware ordering (`invoke-*` sequence)
-- Method-local (no CFG explosion)
-- Designed for **sequence-based rule matching**
+- preserves **static call order** within each method
+- offset-aware ordering of `invoke-*` instructions
+- method-local (no CFG explosion)
+- designed for **sequence-based rule matching**
+
+---
+
+## Repository Structure
+
+```text
+src/dextrace/
+  api.py                  # public Python API entry point
+  cli/                    # CLI entry points
+  core/                   # APK/DEX parsing and API extraction core
+  dalvik/                 # Dalvik disassembly and opcode utilities
+  manifest/               # binary AndroidManifest parsing
+  errors.py               # shared project exceptions
+  version.py              # package version
+
+tests/
+  fixtures/               # synthetic fixtures used by tests
+  test_*.py               # pytest-based test suite
+
+docs/
+  modules-overview.md     # module-by-module handoff guide
+  development-workflow.md # contributor workflow and validation notes
+  current-status.md       # current state, known gaps, handoff notes
+```
+
+### Key areas
+
+#### `src/dextrace/cli/`
+
+Command-line entry points.
+
+* `main.py`: top-level CLI dispatcher
+* `cmd_meta.py`: metadata-oriented inspection
+* `cmd_disasm.py`: disassembly-oriented inspection
+* `cmd_dex.py`: DEX/API-oriented inspection
+
+#### `src/dextrace/core/`
+
+Core APK / DEX parsing and API extraction logic.
+
+Includes:
+
+* APK reading
+* APK metadata extraction
+* manifest parsing bridge
+* DEX structure parsing
+* method/code mapping
+* API extraction
+* method/API resolution
+
+#### `src/dextrace/dalvik/`
+
+Dalvik bytecode internals.
+
+Includes:
+
+* opcode format metadata
+* operand decoding
+* instruction size handling
+* payload decoding
+* disassembly support
+* smali-oriented helpers
+
+#### `src/dextrace/manifest/`
+
+Low-level binary AXML parsing used by manifest-related workflows.
 
 ---
 
 ## 📦 Installation
 
-Development install (editable mode):
+### Development install (editable mode)
 
 ```bash
 git clone https://github.com/ev-flow/DexTrace.git
 cd DexTrace
 pip install -e .
 ```
+
+### Optional Pipenv workflow
+
+```bash
+pipenv install --dev
+pipenv shell
+```
+
+---
 
 ## CLI Usage
 
@@ -143,11 +232,10 @@ All commands support structured JSON output:
 dextrace dex --api-seq --json sample.apk
 ```
 
----
-
 ## Example Output
 
-### Stage2
+### Stage 2
+
 ```json
 {
   "dex": {
@@ -181,3 +269,132 @@ dextrace dex --api-seq --json sample.apk
   }
 }
 ```
+
+---
+
+## Running Tests
+
+Run the full test suite:
+
+```bash
+pytest
+```
+
+Run a targeted test file:
+
+```bash
+pytest tests/test_dex_parser.py
+```
+
+Run tests by keyword:
+
+```bash
+pytest -k api_extractor
+```
+### Suggested subsystem-oriented test runs
+
+* CLI changes:
+
+  ```bash
+  pytest tests/test_cli_meta.py tests/test_smoke.py
+  ```
+
+* APK / metadata changes:
+
+  ```bash
+  pytest tests/test_apk_reader.py tests/test_apk_metadata.py
+  ```
+
+* manifest changes:
+
+  ```bash
+  pytest tests/test_manifest_parser.py
+  ```
+
+* DEX parser changes:
+
+  ```bash
+  pytest tests/test_dex_parser.py tests/test_dex_header.py
+  ```
+
+* API extraction changes:
+
+  ```bash
+  pytest tests/test_dex_api_extractor.py
+  ```
+
+* Dalvik / disassembly changes:
+
+  ```bash
+  pytest -k disassembler
+  ```
+
+---
+
+## Development Notes
+
+DexTrace is organized by subsystem, so contributors should usually:
+
+1. identify the affected subsystem first
+2. make the smallest targeted change possible
+3. run the closest subsystem tests first
+4. broaden validation only if the change touches shared logic
+5. update documentation when contributor-facing behavior changes
+
+When DexTrace is used under Quark Engine, Quark-facing mismatches should be investigated conservatively and evidence-first. Preserve:
+
+* APK identifier or sample path
+* rule IDs
+* exact commands used
+* DexTrace output
+* comparison-core output such as Androguard
+* diff excerpts
+* current hypothesis
+
+Prefer wording such as:
+
+* inconsistent API matching
+* resolution difference
+* invoke extraction gap
+
+until the exact root cause is verified in code and tests.
+
+---
+
+## Documentation
+
+Additional contributor documentation:
+
+* [Contributing](CONTRIBUTING.md)
+* [Modules Overview](docs/modules-overview.md)
+* [Development Workflow](docs/development-workflow.md)
+* [Current Status](docs/current-status.md)
+
+---
+
+## Samples and Build Artifacts
+
+The repository may include:
+
+* extracted sample APK directories for validation or reproduction
+* generated build artifacts under `dist/`
+
+These are useful for testing and packaging, but they are **not** the core implementation surface.
+
+---
+
+## Relationship with Quark Engine
+
+DexTrace can be used as an analysis core under Quark Engine.
+In that setup:
+
+* **DexTrace** is responsible for parsing APK / DEX input and extracting evidence
+* **Quark Engine** is responsible for higher-level rule matching and scoring
+
+When validating Quark-facing behavior, comparisons should keep the APK, rule set, and Quark version fixed while only changing the analysis core.
+
+---
+
+## License
+
+See [LICENSE](LICENSE).
