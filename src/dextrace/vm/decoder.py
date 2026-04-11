@@ -11,6 +11,7 @@ cmd_trace.py imports only this module from vm/.
 
 from __future__ import annotations
 
+import struct
 from typing import Dict, List, Optional
 
 from dextrace.core.dex_resolver import DexResolver
@@ -29,6 +30,10 @@ class MethodNotFound(Exception):
     """Raised when entry_sig is not present in the given DEX bytes."""
 
 
+class DexParseError(Exception):
+    """Raised when dex_bytes is malformed or too short to parse."""
+
+
 def walk_method(
     dex_bytes: bytes,
     entry_sig: str,
@@ -41,16 +46,25 @@ def walk_method(
     string literals, type names, field sigs).
 
     Raises MethodNotFound if entry_sig is not found in dex_bytes.
+    Raises DexParseError if dex_bytes is malformed.
     """
-    if resolver is None:
-        resolver = DexResolver(dex_bytes)
+    try:
+        if resolver is None:
+            resolver = DexResolver(dex_bytes)
 
-    sig_to_codeoff = build_sig_to_codeoff_map(dex_bytes, resolver)
+        sig_to_codeoff = build_sig_to_codeoff_map(dex_bytes, resolver)
+    except (ValueError, struct.error) as e:
+        raise DexParseError(str(e)) from e
+
     code_off = sig_to_codeoff.get(entry_sig)
 
     if code_off is None:
         raise MethodNotFound(f"method not found: {entry_sig}")
 
-    dis = DalvikDisassembler(dex_bytes=dex_bytes, resolver=resolver)
-    method = dis.disassemble_method(code_off)
+    try:
+        dis = DalvikDisassembler(dex_bytes=dex_bytes, resolver=resolver)
+        method = dis.disassemble_method(code_off)
+    except (ValueError, struct.error) as e:
+        raise DexParseError(str(e)) from e
+
     return method.instructions

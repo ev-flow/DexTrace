@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from dextrace.core.apk_reader import ApkReader
-from dextrace.vm.decoder import MethodNotFound, walk_method
+from dextrace.vm.decoder import DexParseError, MethodNotFound, walk_method
 
 
 def register(p: argparse.ArgumentParser) -> None:
@@ -89,6 +89,9 @@ def run(args: argparse.Namespace) -> int:
     except MethodNotFound as e:
         print(f"[ERROR] {e}", file=sys.stderr)
         return 1
+    except DexParseError as e:
+        print(f"[ERROR] malformed DEX: {e}", file=sys.stderr)
+        return 3
 
     out: Dict[str, Any] = {
         "version": 1,
