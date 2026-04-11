@@ -15,11 +15,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import zipfile
 from pathlib import Path
 from typing import Any, Dict
 
-from dextrace.core.apk_reader import ApkReader
+from dextrace.cli._io import load_dex_bytes
 from dextrace.vm.decoder import DexParseError, MethodNotFound, walk_method
 
 
@@ -39,15 +38,7 @@ def register(p: argparse.ArgumentParser) -> None:
 # ---------------------------------------------------------------------------
 
 def _load_dex_bytes(input_path: Path) -> tuple[bytes, str]:
-    if input_path.suffix.lower() == ".dex":
-        return input_path.read_bytes(), input_path.name
-    try:
-        apk = ApkReader(str(input_path))
-    except zipfile.BadZipFile:
-        raise SystemExit(f"not a valid APK (bad zip): {input_path.name}")
-    if "classes.dex" not in apk.list_entries():
-        raise SystemExit("APK does not contain classes.dex")
-    return apk.read_file("classes.dex"), "classes.dex"
+    return load_dex_bytes(input_path)
 
 
 def _insn_to_dict(ins) -> Dict[str, Any]:

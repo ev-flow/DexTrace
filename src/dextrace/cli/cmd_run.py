@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from dextrace.cli._io import load_dex_bytes
 from dextrace.core.dex_parser import DexParser
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.core.dex_code_map import build_sig_to_codeoff_map
@@ -67,13 +68,22 @@ def run(args: argparse.Namespace) -> int:
     if not input_path.exists():
         _err(f"file not found: {input_path}")
         return 1
-    if input_path.suffix.lower() != ".dex":
-        _err(f"expected a .dex file, got: {input_path.suffix!r}")
+    if not input_path.is_file():
+        _err(f"not a file: {input_path}")
         return 1
+    if input_path.suffix.lower() not in {".dex", ".apk"}:
+        _err(f"expected a .dex or .apk file, got: {input_path.suffix!r}")
+        return 1
+
+    # --- Load DEX bytes (handles both .dex and .apk) ----------------------
+    try:
+        dex_bytes, _dex_name = load_dex_bytes(input_path)
+    except SystemExit as e:
+        _err(str(e))
+        return 3
 
     # --- Parse DEX -------------------------------------------------------
     try:
-        dex_bytes = input_path.read_bytes()
         parser = DexParser(dex_bytes)
         resolver = DexResolver(dex_bytes)
     except Exception as exc:
