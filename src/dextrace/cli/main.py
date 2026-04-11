@@ -10,6 +10,7 @@ from dextrace.version import __version__
 from dextrace.cli import cmd_meta
 from dextrace.cli import cmd_dex
 from dextrace.cli import cmd_disasm
+from dextrace.cli import cmd_trace
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -55,6 +56,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disassemble specified methods and output JSON for Quark stage-5.",
     )
     cmd_disasm.register(p_disasm)
+
+    # -------------------------
+    # trace subcommand
+    # -------------------------
+    p_trace = subparsers.add_parser(
+        "trace",
+        help="Walk a method statically — decode every instruction (no execution)",
+    )
+    cmd_trace.register(p_trace)
 
     return parser
 
