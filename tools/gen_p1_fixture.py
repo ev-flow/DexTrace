@@ -117,10 +117,9 @@ def build_p1_dex() -> bytes:
 
     code_item_off = data_off + len(data)
     # code_item: registers=1, ins=0, outs=0, tries=0, debug_info_off=0, insns_size=3
-    code_item = (
-        struct.pack("<HHHHII", 1, 0, 0, 0, 0, len(insns))
-        + struct.pack("<" + "H" * len(insns), *insns)
-    )
+    code_item = struct.pack(
+        "<HHHHII", 1, 0, 0, 0, 0, len(insns)
+    ) + struct.pack("<" + "H" * len(insns), *insns)
     data.extend(code_item)
 
     class_data_off_val = data_off + len(data)
@@ -128,8 +127,13 @@ def build_p1_dex() -> bytes:
     #   static_fields=0, instance_fields=0, direct_methods=1, virtual_methods=0
     #   encoded_method: method_idx_diff=0, access_flags=0x9 (public|static), code_off
     class_data = (
-        _uleb128(0) + _uleb128(0) + _uleb128(1) + _uleb128(0)
-        + _uleb128(0) + _uleb128(0x9) + _uleb128(code_item_off)
+        _uleb128(0)
+        + _uleb128(0)
+        + _uleb128(1)
+        + _uleb128(0)
+        + _uleb128(0)
+        + _uleb128(0x9)
+        + _uleb128(code_item_off)
     )
     data.extend(class_data)
 
@@ -143,16 +147,18 @@ def build_p1_dex() -> bytes:
         return struct.pack("<HHII", t, 0, size, offset)
 
     map_items = [
-        map_item(0x0000, 1, 0),                                    # header_item
-        map_item(0x0001, len(strings), string_ids_off),            # string_id_item
-        map_item(0x0002, len(type_string_ids), type_ids_off),      # type_id_item
-        map_item(0x0003, len(proto_ids), proto_ids_off),           # proto_id_item
-        map_item(0x0005, len(method_ids), method_ids_off),         # method_id_item
-        map_item(0x0006, 1, class_defs_off),                       # class_def_item
-        map_item(0x2001, 1, code_item_off),                        # code_item
-        map_item(0x2000, 1, class_data_off_val),                   # class_data_item
-        map_item(0x2002, len(strings), string_data_offs[0]),       # string_data_item
-        map_item(0x1000, 1, map_off),                              # map_list
+        map_item(0x0000, 1, 0),  # header_item
+        map_item(0x0001, len(strings), string_ids_off),  # string_id_item
+        map_item(0x0002, len(type_string_ids), type_ids_off),  # type_id_item
+        map_item(0x0003, len(proto_ids), proto_ids_off),  # proto_id_item
+        map_item(0x0005, len(method_ids), method_ids_off),  # method_id_item
+        map_item(0x0006, 1, class_defs_off),  # class_def_item
+        map_item(0x2001, 1, code_item_off),  # code_item
+        map_item(0x2000, 1, class_data_off_val),  # class_data_item
+        map_item(
+            0x2002, len(strings), string_data_offs[0]
+        ),  # string_data_item
+        map_item(0x1000, 1, map_off),  # map_list
     ]
     data.extend(struct.pack("<I", len(map_items)) + b"".join(map_items))
 
@@ -163,7 +169,8 @@ def build_p1_dex() -> bytes:
     string_id_items = b"".join(struct.pack("<I", o) for o in string_data_offs)
     type_id_items = b"".join(struct.pack("<I", idx) for idx in type_string_ids)
     proto_id_items = b"".join(
-        struct.pack("<III", shorty, ret, params) for shorty, ret, params in proto_ids
+        struct.pack("<III", shorty, ret, params)
+        for shorty, ret, params in proto_ids
     )
     method_id_items = b"".join(
         struct.pack("<HHI", cls_idx, proto_idx, name_idx)
@@ -173,14 +180,14 @@ def build_p1_dex() -> bytes:
     # class_def_item (32 bytes)
     class_def_item = struct.pack(
         "<IIIIIIII",
-        2,           # class_idx -> "Lp1;"
-        0x1,         # access_flags: public
-        1,           # superclass_idx -> "Ljava/lang/Object;"
-        0,           # interfaces_off
+        2,  # class_idx -> "Lp1;"
+        0x1,  # access_flags: public
+        1,  # superclass_idx -> "Ljava/lang/Object;"
+        0,  # interfaces_off
         0xFFFFFFFF,  # source_file_idx: NO_INDEX
-        0,           # annotations_off
+        0,  # annotations_off
         class_data_off_val,
-        0,           # static_values_off
+        0,  # static_values_off
     )
 
     # ---- header ----
@@ -188,9 +195,9 @@ def build_p1_dex() -> bytes:
     header[0:8] = b"dex\n035\x00"
     struct.pack_into("<I", header, 32, file_size)
     struct.pack_into("<I", header, 36, HEADER_SIZE)
-    struct.pack_into("<I", header, 40, 0x12345678)   # endian_tag
-    struct.pack_into("<I", header, 44, 0)             # link_size
-    struct.pack_into("<I", header, 48, 0)             # link_off
+    struct.pack_into("<I", header, 40, 0x12345678)  # endian_tag
+    struct.pack_into("<I", header, 44, 0)  # link_size
+    struct.pack_into("<I", header, 48, 0)  # link_off
     struct.pack_into("<I", header, 52, map_off)
     struct.pack_into("<I", header, 56, len(strings))
     struct.pack_into("<I", header, 60, string_ids_off)
@@ -202,7 +209,7 @@ def build_p1_dex() -> bytes:
     struct.pack_into("<I", header, 84, field_ids_off)
     struct.pack_into("<I", header, 88, len(method_ids))
     struct.pack_into("<I", header, 92, method_ids_off)
-    struct.pack_into("<I", header, 96, 1)              # class_defs_size
+    struct.pack_into("<I", header, 96, 1)  # class_defs_size
     struct.pack_into("<I", header, 100, class_defs_off)
     struct.pack_into("<I", header, 104, data_size)
     struct.pack_into("<I", header, 108, data_off)
@@ -219,20 +226,28 @@ def build_p1_dex() -> bytes:
     assert len(blob) <= data_off, f"layout overrun: {len(blob)} > {data_off}"
     blob += b"\x00" * (data_off - len(blob))
     blob += bytes(data)
-    assert len(blob) == file_size, f"file_size mismatch: {len(blob)} != {file_size}"
+    assert (
+        len(blob) == file_size
+    ), f"file_size mismatch: {len(blob)} != {file_size}"
 
-    blob = bytearray(blob)
-    sig = hashlib.sha1(blob[32:]).digest()
-    blob[12:32] = sig
-    checksum = zlib.adler32(blob[12:]) & 0xFFFFFFFF
-    struct.pack_into("<I", blob, 8, checksum)
+    buf = bytearray(blob)
+    sig = hashlib.sha1(buf[32:], usedforsecurity=False).digest()
+    buf[12:32] = sig
+    checksum = zlib.adler32(buf[12:]) & 0xFFFFFFFF
+    struct.pack_into("<I", buf, 8, checksum)
 
-    return bytes(blob)
+    return bytes(buf)
 
 
 if __name__ == "__main__":
     dex = build_p1_dex()
-    out = Path(__file__).parent.parent / "tests" / "fixtures" / "samples" / "p1_const_return.dex"
+    out = (
+        Path(__file__).parent.parent
+        / "tests"
+        / "fixtures"
+        / "samples"
+        / "p1_const_return.dex"
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)
     print(f"wrote {out} ({len(dex)} bytes)")

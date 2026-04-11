@@ -22,13 +22,16 @@ import pytest
 
 from dextrace.cli.main import main
 
-FIXTURE_P1 = Path(__file__).parent / "fixtures" / "samples" / "p1_const_return.dex"
+FIXTURE_P1 = (
+    Path(__file__).parent / "fixtures" / "samples" / "p1_const_return.dex"
+)
 ENTRY_P1 = "Lp1;->main()I"
 
 
 # ---------------------------------------------------------------------------
 # ISSUE-004: APK files return "expected a .dex file" instead of working
 # ---------------------------------------------------------------------------
+
 
 def _make_apk_with_dex(path, dex_bytes: bytes) -> None:
     """Build a minimal APK (zip) containing the given DEX bytes as classes.dex."""
@@ -98,6 +101,7 @@ def test_cli_run_bad_apk_exits_3(tmp_path):
 # ---------------------------------------------------------------------------
 # ISSUE-005: directory-as-input gives exit 3 instead of exit 1
 # ---------------------------------------------------------------------------
+
 
 def test_cli_run_directory_input_exits_1(tmp_path):
     """

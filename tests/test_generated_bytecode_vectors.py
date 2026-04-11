@@ -22,6 +22,7 @@ def _read_u16_from_units(units: List[int]) -> Callable[[int], int]:
         if uoff < 0 or uoff >= len(units):
             return 0
         return int(units[uoff]) & 0xFFFF
+
     return read_u16
 
 
@@ -76,7 +77,9 @@ def _units_31c(op: int, aa: int = 1, idx: int = 0x00010002) -> List[int]:
     return [op | ((aa & 0xFF) << 8), lo, hi]
 
 
-def _units_22c(op: int, a: int = 1, b: int = 2, idx: int = 0x0001) -> List[int]:
+def _units_22c(
+    op: int, a: int = 1, b: int = 2, idx: int = 0x0001
+) -> List[int]:
     hi = ((b & 0xF) << 4) | (a & 0xF)
     return [op | ((hi & 0xFF) << 8), idx & 0xFFFF]
 
@@ -87,14 +90,18 @@ def _units_23x(op: int, aa: int = 1, bb: int = 2, cc: int = 3) -> List[int]:
     return [w0, w1]
 
 
-def _units_22b(op: int, aa: int = 1, bb: int = 2, cc_s8: int = -4) -> List[int]:
+def _units_22b(
+    op: int, aa: int = 1, bb: int = 2, cc_s8: int = -4
+) -> List[int]:
     w0 = op | ((aa & 0xFF) << 8)
     cc = cc_s8 & 0xFF
     w1 = (bb & 0xFF) | ((cc & 0xFF) << 8)
     return [w0, w1]
 
 
-def _units_22s(op: int, a: int = 1, b: int = 2, lit_s16: int = -5) -> List[int]:
+def _units_22s(
+    op: int, a: int = 1, b: int = 2, lit_s16: int = -5
+) -> List[int]:
     hi = ((b & 0xF) << 4) | (a & 0xF)
     return [op | ((hi & 0xFF) << 8), lit_s16 & 0xFFFF]
 
@@ -211,7 +218,9 @@ def test_generated_vectors_decode_supported_formats():
         read_u16 = _read_u16_from_units(units)
         ops = decode_by_format(fmt=fmt, uoff=0, read_u16=read_u16)
 
-        assert ops is not None, f"format {fmt} should be decodable but got None"
+        assert (
+            ops is not None
+        ), f"format {fmt} should be decodable but got None"
         # basic sanity: regs strings begin with v
         for r in ops.regs:
             assert r.startswith("v")

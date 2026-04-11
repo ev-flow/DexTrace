@@ -40,23 +40,26 @@ from dextrace.vm.register_file import RegisterFile
 from dextrace.vm.state import VMState
 
 import dextrace.vm.handlers.arithmetic as _arith
-import dextrace.vm.handlers.array      as _array
-import dextrace.vm.handlers.branch     as _branch
-import dextrace.vm.handlers.compare    as _compare
-import dextrace.vm.handlers.field      as _field
-import dextrace.vm.handlers.move       as _move
-import dextrace.vm.handlers.type_conv  as _type_conv
-
+import dextrace.vm.handlers.array as _array
+import dextrace.vm.handlers.branch as _branch
+import dextrace.vm.handlers.compare as _compare
+import dextrace.vm.handlers.field as _field
+import dextrace.vm.handlers.move as _move
+import dextrace.vm.handlers.type_conv as _type_conv
 
 # ---------------------------------------------------------------------------
 # Internal signals
 # ---------------------------------------------------------------------------
 
+
 class _ReturnSignal(Exception):
     """Raised by return-* handlers to unwind one call frame."""
+
     __slots__ = ("value", "is_wide")
 
-    def __init__(self, value: Optional[Union[int, str]], is_wide: bool = False) -> None:
+    def __init__(
+        self, value: Optional[Union[int, str]], is_wide: bool = False
+    ) -> None:
         self.value = value
         self.is_wide = is_wide
 
@@ -65,16 +68,20 @@ class _ReturnSignal(Exception):
 # Return handlers
 # ---------------------------------------------------------------------------
 
+
 def _handle_return_void(insn: DecodedInsn, state: VMState) -> None:
     raise _ReturnSignal(None, is_wide=False)
+
 
 def _handle_return(insn: DecodedInsn, state: VMState) -> None:
     val = state.registers.get(reg_index(insn.regs[0]))
     raise _ReturnSignal(val, is_wide=False)
 
+
 def _handle_return_wide(insn: DecodedInsn, state: VMState) -> None:
     val = state.registers.get_wide(reg_index(insn.regs[0]))
     raise _ReturnSignal(val, is_wide=True)
+
 
 def _handle_return_object(insn: DecodedInsn, state: VMState) -> None:
     val = state.registers.get(reg_index(insn.regs[0]))
@@ -84,6 +91,7 @@ def _handle_return_object(insn: DecodedInsn, state: VMState) -> None:
 # ---------------------------------------------------------------------------
 # DalvikVM
 # ---------------------------------------------------------------------------
+
 
 class DalvikVM:
     MAX_STEPS = 100_000  # guard against infinite loops
@@ -111,9 +119,9 @@ class DalvikVM:
         _field.register(self._eval)
         _array.register(self._eval)
 
-        self._eval["return-void"]   = _handle_return_void
-        self._eval["return"]        = _handle_return
-        self._eval["return-wide"]   = _handle_return_wide
+        self._eval["return-void"] = _handle_return_void
+        self._eval["return"] = _handle_return
+        self._eval["return-wide"] = _handle_return_wide
         self._eval["return-object"] = _handle_return_object
 
     # ------------------------------------------------------------------
@@ -155,9 +163,13 @@ class DalvikVM:
     # Core execution loop
     # ------------------------------------------------------------------
 
-    def _execute(self, code_off: int, state: VMState) -> Optional[Union[int, str]]:
+    def _execute(
+        self, code_off: int, state: VMState
+    ) -> Optional[Union[int, str]]:
         insns = self._get_insns(code_off)
-        uoff_to_idx: Dict[int, int] = {ins.uoff: i for i, ins in enumerate(insns)}
+        uoff_to_idx: Dict[int, int] = {
+            ins.uoff: i for i, ins in enumerate(insns)
+        }
 
         steps = 0
         while True:
@@ -180,7 +192,9 @@ class DalvikVM:
 
             # ---- invoke-* handled inline (OV-1) -------------------------
             if mnemonic.startswith("invoke-"):
-                callee_code_off = self._do_invoke(insn, state, caller_code_off=code_off)
+                callee_code_off = self._do_invoke(
+                    insn, state, caller_code_off=code_off
+                )
                 if callee_code_off is not None:
                     # Entered callee: switch instruction context
                     code_off = callee_code_off
@@ -265,17 +279,16 @@ class DalvikVM:
 
         callee_code_off = self._sig_to_codeoff.get(callee_sig)
         if callee_code_off is None:
-            # External — stub with 0 result
+            # External — stub with 0 result (discard any stale external result
+            # since Dalvik does not require move-result for unused return values)
             state.pending_result = 0
             state.pending_result_is_wide = False
             return None
 
-        # OV-3: stale pending_result guard
-        if state.pending_result is not None:
-            raise DexTraceVMError(
-                f"invoke at pc={insn.uoff:#06x}: pending_result not consumed "
-                f"before invoking {callee_sig!r}"
-            )
+        # OV-3: stale pending_result guard — only applies to internal callees.
+        # A prior external stub may have left pending_result=0 if the caller
+        # chose not to use the return value (valid Dalvik); clear it silently.
+        state.pending_result = None
 
         # OV-4: size callee RegisterFile from code_item
         callee_code = self._parser.parse_code_item(callee_code_off)

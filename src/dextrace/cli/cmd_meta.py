@@ -61,10 +61,17 @@ def run(args):
     try:
         meta = ApkMetadata(apk_path).get_metadata()
     except BadAxmlFormat:
-        print(_error("Malformed AndroidManifest.xml (AXML parse failed)", "BAD_MANIFEST"))
+        print(
+            _error(
+                "Malformed AndroidManifest.xml (AXML parse failed)",
+                "BAD_MANIFEST",
+            )
+        )
         return 1
     except Exception as e:
-        print(_error(f"Failed to extract metadata: {str(e)}", "META_PARSE_ERROR"))
+        print(
+            _error(f"Failed to extract metadata: {str(e)}", "META_PARSE_ERROR")
+        )
         return 1
 
     # === 4. JSON serialization safety ===

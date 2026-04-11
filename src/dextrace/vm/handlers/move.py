@@ -16,10 +16,10 @@ from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.int_ops import i32, reg_index
 from dextrace.vm.state import VMState
 
-
 # ---------------------------------------------------------------------------
 # Const
 # ---------------------------------------------------------------------------
+
 
 def handle_nop(insn: DecodedInsn, state: VMState) -> None:
     pass
@@ -28,14 +28,14 @@ def handle_nop(insn: DecodedInsn, state: VMState) -> None:
 def handle_const4(insn: DecodedInsn, state: VMState) -> None:
     # const/4 vA, #+B  (4-bit signed literal)
     dest = reg_index(insn.regs[0])
-    val = i32(int(insn.param))
+    val = i32(int(insn.param or 0))
     state.registers.set(dest, val)
 
 
 def handle_const16(insn: DecodedInsn, state: VMState) -> None:
     # const/16 vAA, #+BBBB
     dest = reg_index(insn.regs[0])
-    val = i32(int(insn.param))
+    val = i32(int(insn.param or 0))
     state.registers.set(dest, val)
 
 
@@ -91,6 +91,7 @@ def handle_const_string(insn: DecodedInsn, state: VMState) -> None:
 # Move
 # ---------------------------------------------------------------------------
 
+
 def handle_move(insn: DecodedInsn, state: VMState) -> None:
     # move vA, vB
     dest = reg_index(insn.regs[0])
@@ -139,16 +140,21 @@ def handle_move_object_16(insn: DecodedInsn, state: VMState) -> None:
 # move-result*  (consume pending_result — OV-3)
 # ---------------------------------------------------------------------------
 
+
 def handle_move_result(insn: DecodedInsn, state: VMState) -> None:
     if state.pending_result is None:
         raise DexTraceVMError("move-result: no pending result")
     if state.pending_result_is_wide:
-        raise DexTraceVMError("move-result: pending result is wide, use move-result-wide")
+        raise DexTraceVMError(
+            "move-result: pending result is wide, use move-result-wide"
+        )
     dest = reg_index(insn.regs[0])
     val = state.pending_result
     state.pending_result = None
     state.pending_result_is_wide = False
-    state.registers.set(dest, int(val) if not isinstance(val, str) else hash(val) & 0xFFFF_FFFF)
+    state.registers.set(
+        dest, int(val) if not isinstance(val, str) else hash(val) & 0xFFFF_FFFF
+    )
 
 
 def handle_move_result_wide(insn: DecodedInsn, state: VMState) -> None:
@@ -171,12 +177,15 @@ def handle_move_result_object(insn: DecodedInsn, state: VMState) -> None:
     val = state.pending_result
     state.pending_result = None
     state.pending_result_is_wide = False
-    state.registers.set(dest, int(val) if not isinstance(val, str) else hash(val) & 0xFFFF_FFFF)
+    state.registers.set(
+        dest, int(val) if not isinstance(val, str) else hash(val) & 0xFFFF_FFFF
+    )
 
 
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
+
 
 def register(eval_table: dict) -> None:
     eval_table["nop"] = handle_nop

@@ -47,7 +47,13 @@ def walk_method(
             resolver = DexResolver(dex_bytes)
 
         sig_to_codeoff = build_sig_to_codeoff_map(dex_bytes, resolver)
-    except (ValueError, struct.error, IndexError, KeyError, OverflowError) as e:
+    except (
+        ValueError,
+        struct.error,
+        IndexError,
+        KeyError,
+        OverflowError,
+    ) as e:
         raise DexParseError(str(e)) from e
 
     code_off = sig_to_codeoff.get(entry_sig)
@@ -58,7 +64,13 @@ def walk_method(
     try:
         dis = DalvikDisassembler(dex_bytes=dex_bytes, resolver=resolver)
         method = dis.disassemble_method(code_off)
-    except (ValueError, struct.error, IndexError, KeyError, OverflowError) as e:
+    except (
+        ValueError,
+        struct.error,
+        IndexError,
+        KeyError,
+        OverflowError,
+    ) as e:
         raise DexParseError(str(e)) from e
 
     return method.instructions

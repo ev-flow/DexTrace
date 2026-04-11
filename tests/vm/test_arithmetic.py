@@ -45,7 +45,9 @@ class TestShiftSemantics:
         """shr-int: arithmetic right shift — sign bit propagates."""
         state = _make_state(0, 0x8000_0000, 1)
         # v0 = dest, v1 = 0x80000000 (stored as signed -2147483648), v2 = 1
-        state.registers.set(1, 0x8000_0000)  # stored as unsigned; i32 will treat as -ve
+        state.registers.set(
+            1, 0x8000_0000
+        )  # stored as unsigned; i32 will treat as -ve
         insn = _make_insn(["v0", "v1", "v2"])
         handle_shr_int(insn, state)
         result = state.registers.get(0)

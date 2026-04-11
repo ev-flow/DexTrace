@@ -22,10 +22,10 @@ import pytest
 from dextrace.cli.main import main
 from dextrace.vm.decoder import DexParseError, walk_method
 
-
 # ---------------------------------------------------------------------------
 # ISSUE-002: malformed DEX raises traceback instead of [ERROR]
 # ---------------------------------------------------------------------------
+
 
 def test_walk_method_malformed_dex_raises_parse_error():
     """
@@ -70,6 +70,7 @@ def test_cli_malformed_dex_exits_3(tmp_path):
 # ISSUE-003: APK without classes.dex raises unhandled KeyError
 # ---------------------------------------------------------------------------
 
+
 def _make_apk_without_dex(path):
     """Build a minimal APK (zip) that does NOT contain classes.dex."""
     with zipfile.ZipFile(path, "w") as zf:
@@ -98,6 +99,7 @@ def test_cli_apk_no_classes_dex_exits_3(tmp_path):
 # ---------------------------------------------------------------------------
 # REVIEW-001: non-.dex non-ZIP file hits ApkReader and raises uncaught BadZipFile
 # ---------------------------------------------------------------------------
+
 
 def test_cli_non_zip_non_dex_exits_3(tmp_path):
     """

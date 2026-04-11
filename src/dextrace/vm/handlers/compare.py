@@ -31,6 +31,7 @@ from dextrace.vm.state import VMState
 def _bits_to_float(n: int) -> float:
     return struct.unpack(">f", struct.pack(">I", n & 0xFFFF_FFFF))[0]
 
+
 def _bits_to_double(n: int) -> float:
     return struct.unpack(">d", struct.pack(">Q", n & 0xFFFF_FFFF_FFFF_FFFF))[0]
 
@@ -39,10 +40,11 @@ def _bits_to_double(n: int) -> float:
 # cmp-long (23x)
 # ---------------------------------------------------------------------------
 
+
 def handle_cmp_long(insn: DecodedInsn, state: VMState) -> None:
     dest = reg_index(insn.regs[0])
-    a    = state.registers.get_wide(reg_index(insn.regs[1]))
-    b    = state.registers.get_wide(reg_index(insn.regs[2]))
+    a = state.registers.get_wide(reg_index(insn.regs[1]))
+    b = state.registers.get_wide(reg_index(insn.regs[2]))
     # interpret as signed
     if a >= 0x8000_0000_0000_0000:
         a -= 0x1_0000_0000_0000_0000
@@ -55,6 +57,7 @@ def handle_cmp_long(insn: DecodedInsn, state: VMState) -> None:
 # cmpl-float / cmpg-float (23x)
 # ---------------------------------------------------------------------------
 
+
 def handle_cmpl_float(insn: DecodedInsn, state: VMState) -> None:
     dest = reg_index(insn.regs[0])
     a = _bits_to_float(state.registers.get(reg_index(insn.regs[1])))
@@ -63,6 +66,7 @@ def handle_cmpl_float(insn: DecodedInsn, state: VMState) -> None:
         state.registers.set(dest, -1)
     else:
         state.registers.set(dest, 1 if a > b else (-1 if a < b else 0))
+
 
 def handle_cmpg_float(insn: DecodedInsn, state: VMState) -> None:
     dest = reg_index(insn.regs[0])
@@ -78,6 +82,7 @@ def handle_cmpg_float(insn: DecodedInsn, state: VMState) -> None:
 # cmpl-double / cmpg-double (23x)
 # ---------------------------------------------------------------------------
 
+
 def handle_cmpl_double(insn: DecodedInsn, state: VMState) -> None:
     dest = reg_index(insn.regs[0])
     a = _bits_to_double(state.registers.get_wide(reg_index(insn.regs[1])))
@@ -86,6 +91,7 @@ def handle_cmpl_double(insn: DecodedInsn, state: VMState) -> None:
         state.registers.set(dest, -1)
     else:
         state.registers.set(dest, 1 if a > b else (-1 if a < b else 0))
+
 
 def handle_cmpg_double(insn: DecodedInsn, state: VMState) -> None:
     dest = reg_index(insn.regs[0])
@@ -101,13 +107,14 @@ def handle_cmpg_double(insn: DecodedInsn, state: VMState) -> None:
 # Registration
 # ---------------------------------------------------------------------------
 
+
 def register(eval_table: dict) -> None:
     pairs = [
-        ("cmp-long",     handle_cmp_long),
-        ("cmpl-float",   handle_cmpl_float),
-        ("cmpg-float",   handle_cmpg_float),
-        ("cmpl-double",  handle_cmpl_double),
-        ("cmpg-double",  handle_cmpg_double),
+        ("cmp-long", handle_cmp_long),
+        ("cmpl-float", handle_cmpl_float),
+        ("cmpg-float", handle_cmpg_float),
+        ("cmpl-double", handle_cmpl_double),
+        ("cmpg-double", handle_cmpg_double),
     ]
     for name, fn in pairs:
         eval_table[name] = fn

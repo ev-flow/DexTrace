@@ -55,7 +55,9 @@ def test_disassemble_dummy_dex_minimal_sequence():
     dex_bytes = build_minimal_test_dex()
 
     resolver = DexResolver(dex_bytes)
-    dis = DalvikDisassembler(dex_bytes=dex_bytes, resolver=resolver, accept_optimized=False)
+    dis = DalvikDisassembler(
+        dex_bytes=dex_bytes, resolver=resolver, accept_optimized=False
+    )
 
     code_off = _find_code_item_off_via_map_list(dex_bytes)
     md = dis.disassemble_method(code_off)
@@ -78,12 +80,15 @@ def test_disassemble_dummy_dex_minimal_sequence():
 
     # ---- const-string v1, "HELLO" ----
     assert ins1.index_type == "string-ref"
-    assert ins1.param == "\"HELLO\""
+    assert ins1.param == '"HELLO"'
     assert ins1.regs == ["v1"]
 
     # ---- invoke-virtual {v2,v1}, StringBuilder.append(String)StringBuilder ----
     assert ins2.index_type == "method-ref"
-    assert ins2.param == "Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;"
+    assert (
+        ins2.param
+        == "Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;"
+    )
     # regs order for 35c should keep {this, arg} => v2 then v1
     assert ins2.regs[:2] == ["v0", "v1"]
 

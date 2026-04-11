@@ -18,10 +18,10 @@ from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.int_ops import i32, u32, reg_index
 from dextrace.vm.state import VMState
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _get3(insn: DecodedInsn, state: VMState):
     """Return (dest_idx, a, b) for 23x-format binary ops: op vA, vB, vC."""
@@ -51,17 +51,21 @@ def _get_lit(insn: DecodedInsn, state: VMState):
 # add-int
 # ---------------------------------------------------------------------------
 
+
 def handle_add_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     state.registers.set(dest, i32(a + b))
+
 
 def handle_add_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     state.registers.set(dest, i32(a + b))
 
+
 def handle_add_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
     state.registers.set(dest, i32(a + lit))
+
 
 def handle_add_int_lit16(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
@@ -72,13 +76,16 @@ def handle_add_int_lit16(insn: DecodedInsn, state: VMState) -> None:
 # sub-int
 # ---------------------------------------------------------------------------
 
+
 def handle_sub_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     state.registers.set(dest, i32(a - b))
 
+
 def handle_sub_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     state.registers.set(dest, i32(a - b))
+
 
 def handle_rsub_int(insn: DecodedInsn, state: VMState) -> None:
     # rsub-int vA, vB, #+CCCC  (result = literal - vB)
@@ -86,6 +93,7 @@ def handle_rsub_int(insn: DecodedInsn, state: VMState) -> None:
     b = state.registers.get(reg_index(insn.regs[1]))
     lit = int(insn.param)
     state.registers.set(dest, i32(lit - b))
+
 
 def handle_rsub_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     handle_rsub_int(insn, state)
@@ -95,17 +103,21 @@ def handle_rsub_int_lit8(insn: DecodedInsn, state: VMState) -> None:
 # mul-int
 # ---------------------------------------------------------------------------
 
+
 def handle_mul_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     state.registers.set(dest, i32(a * b))
+
 
 def handle_mul_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     state.registers.set(dest, i32(a * b))
 
+
 def handle_mul_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
     state.registers.set(dest, i32(a * lit))
+
 
 def handle_mul_int_lit16(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
@@ -116,11 +128,13 @@ def handle_mul_int_lit16(insn: DecodedInsn, state: VMState) -> None:
 # div-int
 # ---------------------------------------------------------------------------
 
+
 def handle_div_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     if b == 0:
         raise DexTraceVMError(f"div-int by zero (pc={insn.uoff:#06x})")
     state.registers.set(dest, i32(int(a / b)))  # truncate toward zero
+
 
 def handle_div_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
@@ -128,11 +142,13 @@ def handle_div_int_2addr(insn: DecodedInsn, state: VMState) -> None:
         raise DexTraceVMError(f"div-int by zero (pc={insn.uoff:#06x})")
     state.registers.set(dest, i32(int(a / b)))
 
+
 def handle_div_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
     if lit == 0:
         raise DexTraceVMError(f"div-int by zero (pc={insn.uoff:#06x})")
     state.registers.set(dest, i32(int(a / lit)))
+
 
 def handle_div_int_lit16(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
@@ -145,6 +161,7 @@ def handle_div_int_lit16(insn: DecodedInsn, state: VMState) -> None:
 # rem-int
 # ---------------------------------------------------------------------------
 
+
 def handle_rem_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     if b == 0:
@@ -152,17 +169,20 @@ def handle_rem_int(insn: DecodedInsn, state: VMState) -> None:
     # Dalvik: truncate-toward-zero remainder (same as Java %)
     state.registers.set(dest, i32(int(a - b * int(a / b))))
 
+
 def handle_rem_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     if b == 0:
         raise DexTraceVMError(f"rem-int by zero (pc={insn.uoff:#06x})")
     state.registers.set(dest, i32(int(a - b * int(a / b))))
 
+
 def handle_rem_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
     if lit == 0:
         raise DexTraceVMError(f"rem-int by zero (pc={insn.uoff:#06x})")
     state.registers.set(dest, i32(int(a - lit * int(a / lit))))
+
 
 def handle_rem_int_lit16(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
@@ -175,17 +195,21 @@ def handle_rem_int_lit16(insn: DecodedInsn, state: VMState) -> None:
 # and-int / or-int / xor-int
 # ---------------------------------------------------------------------------
 
+
 def handle_and_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     state.registers.set(dest, i32(a & b))
+
 
 def handle_and_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     state.registers.set(dest, i32(a & b))
 
+
 def handle_and_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
     state.registers.set(dest, i32(a & lit))
+
 
 def handle_and_int_lit16(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
@@ -196,13 +220,16 @@ def handle_or_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     state.registers.set(dest, i32(a | b))
 
+
 def handle_or_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     state.registers.set(dest, i32(a | b))
 
+
 def handle_or_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
     state.registers.set(dest, i32(a | lit))
+
 
 def handle_or_int_lit16(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
@@ -213,13 +240,16 @@ def handle_xor_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     state.registers.set(dest, i32(a ^ b))
 
+
 def handle_xor_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     state.registers.set(dest, i32(a ^ b))
 
+
 def handle_xor_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
     state.registers.set(dest, i32(a ^ lit))
+
 
 def handle_xor_int_lit16(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
@@ -230,13 +260,16 @@ def handle_xor_int_lit16(insn: DecodedInsn, state: VMState) -> None:
 # shl-int / shr-int / ushr-int
 # ---------------------------------------------------------------------------
 
+
 def handle_shl_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     state.registers.set(dest, i32(u32(a) << (b & 0x1F)))
 
+
 def handle_shl_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     state.registers.set(dest, i32(u32(a) << (b & 0x1F)))
+
 
 def handle_shl_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
@@ -248,9 +281,11 @@ def handle_shr_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     state.registers.set(dest, i32(a) >> (b & 0x1F))
 
+
 def handle_shr_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     state.registers.set(dest, i32(a) >> (b & 0x1F))
+
 
 def handle_shr_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
@@ -262,9 +297,11 @@ def handle_ushr_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     state.registers.set(dest, u32(a) >> (b & 0x1F))
 
+
 def handle_ushr_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     state.registers.set(dest, u32(a) >> (b & 0x1F))
+
 
 def handle_ushr_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
@@ -275,10 +312,12 @@ def handle_ushr_int_lit8(insn: DecodedInsn, state: VMState) -> None:
 # neg-int / not-int
 # ---------------------------------------------------------------------------
 
+
 def handle_neg_int(insn: DecodedInsn, state: VMState) -> None:
     dest = reg_index(insn.regs[0])
     src = reg_index(insn.regs[1])
     state.registers.set(dest, i32(-state.registers.get(src)))
+
 
 def handle_not_int(insn: DecodedInsn, state: VMState) -> None:
     dest = reg_index(insn.regs[0])
@@ -289,6 +328,7 @@ def handle_not_int(insn: DecodedInsn, state: VMState) -> None:
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
+
 
 def register(eval_table: dict) -> None:
     pairs = [

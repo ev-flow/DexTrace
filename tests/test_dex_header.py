@@ -10,18 +10,32 @@ from dextrace.core.dex_header import parse_dex_header, DEX_HEADER_SIZE
 def make_fake_dex(version="039"):
     magic = f"dex\n{version}\0".encode("ascii")
     checksum = 0x12345678
-    signature = b"\xAA" * 20
+    signature = b"\xaa" * 20
 
     fields = [
-        magic, checksum, signature,
-        50000, 112, 0x12345678, 0, 0, 0,
-        10, 0x70,
-        20, 0x170,
-        30, 0x270,
-        40, 0x370,
-        50, 0x470,
-        60, 0x570,
-        70, 0x670,
+        magic,
+        checksum,
+        signature,
+        50000,
+        112,
+        0x12345678,
+        0,
+        0,
+        0,
+        10,
+        0x70,
+        20,
+        0x170,
+        30,
+        0x270,
+        40,
+        0x370,
+        50,
+        0x470,
+        60,
+        0x570,
+        70,
+        0x670,
     ]
 
     hdr = struct.pack("<8sI20s20I", *fields)

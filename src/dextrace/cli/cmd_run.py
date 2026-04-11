@@ -21,10 +21,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import struct
 import sys
 from pathlib import Path
-from typing import Optional
-
 from dextrace.cli._io import load_dex_bytes
 from dextrace.core.dex_parser import DexParser
 from dextrace.core.dex_resolver import DexResolver
@@ -36,13 +35,15 @@ from dextrace.vm.errors import DexTraceVMError, DexTraceNotImplementedError
 def register(p: argparse.ArgumentParser) -> None:
     p.add_argument("input", help="DEX file path")
     p.add_argument(
-        "--entry", "-e",
+        "--entry",
+        "-e",
         required=True,
         metavar="SIG",
         help="Entry method signature, e.g. 'Lp1;->main()I'",
     )
     p.add_argument(
-        "--arg", "-a",
+        "--arg",
+        "-a",
         action="append",
         type=int,
         default=[],
@@ -56,7 +57,8 @@ def register(p: argparse.ArgumentParser) -> None:
         help="Output result as JSON to stdout",
     )
     p.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Print [INFO] progress messages to stderr",
     )
@@ -84,16 +86,28 @@ def run(args: argparse.Namespace) -> int:
 
     # --- Parse DEX -------------------------------------------------------
     try:
-        parser = DexParser(dex_bytes)
+        DexParser(dex_bytes)  # validate structure
         resolver = DexResolver(dex_bytes)
-    except Exception as exc:
+    except (
+        ValueError,
+        struct.error,
+        KeyError,
+        IndexError,
+        OverflowError,
+    ) as exc:
         _err(f"parse error: {exc}")
         return 3
 
     # --- Build method map ------------------------------------------------
     try:
         sig_to_codeoff = build_sig_to_codeoff_map(dex_bytes, resolver)
-    except Exception as exc:
+    except (
+        ValueError,
+        struct.error,
+        KeyError,
+        IndexError,
+        OverflowError,
+    ) as exc:
         _err(f"parse error building method map: {exc}")
         return 3
 
@@ -125,7 +139,7 @@ def run(args: argparse.Namespace) -> int:
     except DexTraceVMError as exc:
         _err(f"VM error: {exc}")
         return 2
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         _err(f"internal error: {exc}")
         return 2
 
@@ -142,6 +156,7 @@ def run(args: argparse.Namespace) -> int:
 # Output formatters (Terminal Noir, per DESIGN.md)
 # ---------------------------------------------------------------------------
 
+
 def _print_text(result) -> None:
     """Text output: 'return: <value>' to stdout."""
     if result is None:
@@ -153,22 +168,18 @@ def _print_text(result) -> None:
 
 
 def _print_json(result) -> None:
-    """JSON output: 2-space indent, ensure_ascii=False, omit null fields."""
-    if result is None:
-        doc = {"return": None}
-    elif isinstance(result, str):
-        doc = {"return": result}
-    else:
-        doc = {"return": result}
-    print(json.dumps(doc, indent=2, ensure_ascii=False))
+    """JSON output: 2-space indent, ensure_ascii=False."""
+    print(json.dumps({"return": result}, indent=2, ensure_ascii=False))
 
 
 # ---------------------------------------------------------------------------
 # Message helpers (stderr only, 7-char fixed-width prefix per DESIGN.md)
 # ---------------------------------------------------------------------------
 
+
 def _err(msg: str) -> None:
     print(f"[ERROR] {msg}", file=sys.stderr)
+
 
 def _info(msg: str) -> None:
     print(f"[INFO]  {msg}", file=sys.stderr)

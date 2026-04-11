@@ -15,12 +15,25 @@ from dextrace.vm.errors import DexTraceNotImplementedError
 from dextrace.vm.state import VMState
 
 _ARRAY_OPS = [
-    "new-array", "filled-new-array", "filled-new-array/range",
-    "fill-array-data", "array-length",
-    "aget", "aget-wide", "aget-object", "aget-boolean", "aget-byte",
-    "aget-char", "aget-short",
-    "aput", "aput-wide", "aput-object", "aput-boolean", "aput-byte",
-    "aput-char", "aput-short",
+    "new-array",
+    "filled-new-array",
+    "filled-new-array/range",
+    "fill-array-data",
+    "array-length",
+    "aget",
+    "aget-wide",
+    "aget-object",
+    "aget-boolean",
+    "aget-byte",
+    "aget-char",
+    "aget-short",
+    "aput",
+    "aput-wide",
+    "aput-object",
+    "aput-boolean",
+    "aput-byte",
+    "aput-char",
+    "aput-short",
 ]
 
 

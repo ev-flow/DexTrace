@@ -56,8 +56,8 @@ def build_minimal_test_dex() -> bytes:
         "<init>",
         "append",
         "V",
-        "LL",      # shorty for (L) -> L
-        "HELLO",   # const-string payload
+        "LL",  # shorty for (L) -> L
+        "HELLO",  # const-string payload
     ]
 
     def string_data_item(s: str) -> bytes:
@@ -77,7 +77,9 @@ def build_minimal_test_dex() -> bytes:
         "Ljava/lang/StringBuilder;",
         "V",
     ]
-    type_ids = [strings.index(d) for d in type_descs]  # descriptor string index
+    type_ids = [
+        strings.index(d) for d in type_descs
+    ]  # descriptor string index
     type_ids_size = len(type_ids)
 
     # protos:
@@ -101,7 +103,11 @@ def build_minimal_test_dex() -> bytes:
     method_ids = [
         (type_descs.index("Ljava/lang/Object;"), 0, strings.index("<init>")),
         (type_descs.index("LTest;"), 0, strings.index("<init>")),
-        (type_descs.index("Ljava/lang/StringBuilder;"), 1, strings.index("append")),
+        (
+            type_descs.index("Ljava/lang/StringBuilder;"),
+            1,
+            strings.index("append"),
+        ),
     ]
     method_ids_size = len(method_ids)
 
@@ -176,9 +182,14 @@ def build_minimal_test_dex() -> bytes:
     #    A=2, G=0 => high8=0x20 => w0=0x206e, w1=append_mid, w2 C=v0(0), D=v1(1) => 0x0010
     # 4) return-void (10x, opcode 0x0e) => 0x000e
     insns = [
-        0x1070, 0x0000, 0x0000,
-        0x011A, int(hello_idx) & 0xFFFF,
-        0x206E, int(append_mid) & 0xFFFF, 0x0010,
+        0x1070,
+        0x0000,
+        0x0000,
+        0x011A,
+        int(hello_idx) & 0xFFFF,
+        0x206E,
+        int(append_mid) & 0xFFFF,
+        0x0010,
         0x000E,
     ]
 
@@ -189,10 +200,9 @@ def build_minimal_test_dex() -> bytes:
     # tries_size=0
     # debug_info_off=0
     # insns_size=len(insns)
-    code_item = (
-        struct.pack("<HHHHII", 2, 1, 2, 0, 0, len(insns))
-        + struct.pack("<" + "H" * len(insns), *insns)
-    )
+    code_item = struct.pack(
+        "<HHHHII", 2, 1, 2, 0, 0, len(insns)
+    ) + struct.pack("<" + "H" * len(insns), *insns)
     data.extend(code_item)
 
     # class_data_item (no strict alignment required)
@@ -232,15 +242,17 @@ def build_minimal_test_dex() -> bytes:
     items = [
         map_item(0x0000, 1, 0),  # header_item
         map_item(0x0001, string_ids_size, string_ids_off),  # string_id_item
-        map_item(0x0002, type_ids_size, type_ids_off),      # type_id_item
-        map_item(0x0003, proto_ids_size, proto_ids_off),    # proto_id_item
+        map_item(0x0002, type_ids_size, type_ids_off),  # type_id_item
+        map_item(0x0003, proto_ids_size, proto_ids_off),  # proto_id_item
         map_item(0x0005, method_ids_size, method_ids_off),  # method_id_item
         map_item(0x0006, class_defs_size, class_defs_off),  # class_def_item
-        map_item(0x1001, 1, type_list_off),                 # type_list
-        map_item(0x2001, 1, code_off),                       # code_item
-        map_item(0x2000, 1, class_data_off),                 # class_data_item
-        map_item(0x2002, string_ids_size, string_data_offs[0]),  # string_data_item (offset to first)
-        map_item(0x1000, 1, map_off),                         # map_list
+        map_item(0x1001, 1, type_list_off),  # type_list
+        map_item(0x2001, 1, code_off),  # code_item
+        map_item(0x2000, 1, class_data_off),  # class_data_item
+        map_item(
+            0x2002, string_ids_size, string_data_offs[0]
+        ),  # string_data_item (offset to first)
+        map_item(0x1000, 1, map_off),  # map_list
     ]
     data.extend(struct.pack("<I", len(items)) + b"".join(items))
 
@@ -258,24 +270,37 @@ def build_minimal_test_dex() -> bytes:
 
     proto_id_items = b"".join(
         [
-            struct.pack("<III", proto0_shorty_idx, proto0_return_type_idx, proto0_parameters_off),
-            struct.pack("<III", proto1_shorty_idx, proto1_return_type_idx, proto1_parameters_off),
+            struct.pack(
+                "<III",
+                proto0_shorty_idx,
+                proto0_return_type_idx,
+                proto0_parameters_off,
+            ),
+            struct.pack(
+                "<III",
+                proto1_shorty_idx,
+                proto1_return_type_idx,
+                proto1_parameters_off,
+            ),
         ]
     )
 
-    method_id_items = b"".join(struct.pack("<HHI", cls, proto, name) for cls, proto, name in method_ids)
+    method_id_items = b"".join(
+        struct.pack("<HHI", cls, proto, name)
+        for cls, proto, name in method_ids
+    )
 
     # class_def_item
     class_def_item = struct.pack(
         "<IIIIIIII",
-        type_descs.index("LTest;"),                 # class_idx
-        0x1,                                        # access_flags (public)
-        type_descs.index("Ljava/lang/Object;"),     # superclass_idx
-        0,                                          # interfaces_off
-        0xFFFFFFFF,                                 # source_file_idx (NO_INDEX)
-        0,                                          # annotations_off
-        class_data_off,                             # class_data_off
-        0,                                          # static_values_off
+        type_descs.index("LTest;"),  # class_idx
+        0x1,  # access_flags (public)
+        type_descs.index("Ljava/lang/Object;"),  # superclass_idx
+        0,  # interfaces_off
+        0xFFFFFFFF,  # source_file_idx (NO_INDEX)
+        0,  # annotations_off
+        class_data_off,  # class_data_off
+        0,  # static_values_off
     )
 
     # ----------------------------
@@ -330,7 +355,9 @@ def build_minimal_test_dex() -> bytes:
     blob += bytes(data)
 
     if len(blob) != file_size:
-        raise RuntimeError(f"layout bug: file_size mismatch {len(blob)} != {file_size}")
+        raise RuntimeError(
+            f"layout bug: file_size mismatch {len(blob)} != {file_size}"
+        )
 
     # signature (SHA1 over bytes[32:])
     sig = hashlib.sha1(blob[32:]).digest()

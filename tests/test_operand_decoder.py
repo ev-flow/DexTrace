@@ -11,6 +11,7 @@ from dextrace.dalvik.operand_decoder import decode_by_format
 def _mk_read_u16(units):
     def read_u16(uoff: int) -> int:
         return units[uoff]
+
     return read_u16
 
 
@@ -22,11 +23,14 @@ def _w0(op=0x00, high8=0x00):
 # common formats
 # -------------------------
 
+
 def test_decode_10x():
     units = [_w0()]
     ins = decode_by_format("10x", 0, _mk_read_u16(units))
     assert ins.regs == []
-    assert ins.index is None and ins.literal is None and ins.target_uoff is None
+    assert (
+        ins.index is None and ins.literal is None and ins.target_uoff is None
+    )
 
 
 def test_decode_11x():
@@ -114,6 +118,7 @@ def test_decode_23x():
 # literals / const extensions
 # -------------------------
 
+
 def test_decode_22b_signed8():
     # w1 low8=BB, high8=CC
     units = [_w0(high8=0x01), 0x80_02]  # BB=2, CC=0x80 => -128
@@ -148,6 +153,7 @@ def test_decode_51l_signed64_minus1():
 # -------------------------
 # control-flow targets
 # -------------------------
+
 
 def test_decode_10t_target():
     # uoff=10, off=-2 => target=8
@@ -212,6 +218,7 @@ def test_decode_31t_target_with_reg():
 # -------------------------
 # invoke-kind
 # -------------------------
+
 
 def test_decode_35c_ag_nibbles_high_low():
     # YOUR impl:

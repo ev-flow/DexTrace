@@ -21,13 +21,16 @@ from pathlib import Path
 
 import pytest
 
-FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "p1_const_return.dex"
+FIXTURE = (
+    Path(__file__).parent / "fixtures" / "samples" / "p1_const_return.dex"
+)
 ENTRY = "Lp1;->main()I"
 
 
 # ---------------------------------------------------------------------------
 # Unit tests: Python API
 # ---------------------------------------------------------------------------
+
 
 def test_fixture_exists():
     assert FIXTURE.exists(), f"fixture not found: {FIXTURE}"
@@ -77,6 +80,7 @@ def test_walk_method_not_found():
 # Integration tests: main() entry point (matches test_smoke.py pattern)
 # ---------------------------------------------------------------------------
 
+
 def _cli(*args: str) -> dict:
     """Invoke dextrace main() and return parsed JSON from captured stdout."""
     import io
@@ -85,6 +89,7 @@ def _cli(*args: str) -> dict:
     buf = io.StringIO()
     with patch("sys.stdout", buf):
         from dextrace.cli.main import main
+
         rc = main(list(args))
     assert rc == 0, f"dextrace {args} exited {rc}"
     return json.loads(buf.getvalue())
@@ -109,5 +114,6 @@ def test_cli_trace_first_mnemonic():
 def test_cli_trace_method_not_found_exit_code():
     """CLI returns 1 when --entry method is not in the DEX."""
     from dextrace.cli.main import main
+
     rc = main(["trace", str(FIXTURE), "--entry", "Lp1;->missing()I"])
     assert rc == 1

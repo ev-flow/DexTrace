@@ -20,5 +20,5 @@ from dextrace.vm.register_file import RegisterFile
 class CallFrame:
     return_pc: int
     method_desc: str
-    caller_registers: RegisterFile   # always a snapshot
-    caller_code_off: int             # engine uses this to restore insn lookup
+    caller_registers: RegisterFile  # always a snapshot
+    caller_code_off: int  # engine uses this to restore insn lookup

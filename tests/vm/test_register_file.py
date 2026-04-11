@@ -40,8 +40,8 @@ class TestWideOperations:
         rf = RegisterFile(4)
         # Store 0xDEAD_BEEF_1234_5678
         rf.set_wide(0, 0xDEAD_BEEF_1234_5678)
-        assert rf.get(0) == 0x1234_5678   # lo in v0
-        assert rf.get(1) == 0xDEAD_BEEF   # hi in v1
+        assert rf.get(0) == 0x1234_5678  # lo in v0
+        assert rf.get(1) == 0xDEAD_BEEF  # hi in v1
         assert rf.get_wide(0) == 0xDEAD_BEEF_1234_5678
 
     def test_wide_zero(self):

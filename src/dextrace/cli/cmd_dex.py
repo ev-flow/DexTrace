@@ -17,16 +17,43 @@ from dextrace.core.dex_header import DexHeader
 def register(parser: ArgumentParser) -> None:
     parser.add_argument("apk", help="Path to APK file")
 
-    parser.add_argument("--header", action="store_true", help="Show DEX header information only")
-    parser.add_argument("--summary", action="store_true", help="Show basic DEX summary (default)")
-     # Stage 2
-    parser.add_argument("--apis", action="store_true", help="Extract invoke-* API calls (Stage 2)")
-    parser.add_argument("--limit", type=int, default=0, help="Limit number of API calls (0 = no limit)")
+    parser.add_argument(
+        "--header",
+        action="store_true",
+        help="Show DEX header information only",
+    )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Show basic DEX summary (default)",
+    )
+    # Stage 2
+    parser.add_argument(
+        "--apis",
+        action="store_true",
+        help="Extract invoke-* API calls (Stage 2)",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Limit number of API calls (0 = no limit)",
+    )
     # Stage 3 & 4
-    parser.add_argument("--api-sets", action="store_true", help="Extract per-method API sets (Stage 3)")
-    parser.add_argument("--api-seq", action="store_true", help="Extract per-method API call sequences (Stage 4)")
+    parser.add_argument(
+        "--api-sets",
+        action="store_true",
+        help="Extract per-method API sets (Stage 3)",
+    )
+    parser.add_argument(
+        "--api-seq",
+        action="store_true",
+        help="Extract per-method API call sequences (Stage 4)",
+    )
 
-    parser.add_argument("--json", action="store_true", help="Output structured JSON")
+    parser.add_argument(
+        "--json", action="store_true", help="Output structured JSON"
+    )
 
     parser.set_defaults(func=run)
 
@@ -43,7 +70,10 @@ def run(args: Namespace) -> int:
     extractor = DexApiExtractor(dex_data)
 
     want_summary = args.summary or (
-        not args.header and not args.apis and not args.api_sets and not args.api_seq
+        not args.header
+        and not args.apis
+        and not args.api_sets
+        and not args.api_seq
     )
 
     # -------------------------
@@ -67,7 +97,11 @@ def run(args: Namespace) -> int:
                 "api_calls_count": len(calls),
             }
         }
-        return _emit(payload, as_json=args.json, fallback_print=lambda p: _print_api_calls(p["dex"]["api_calls"]))
+        return _emit(
+            payload,
+            as_json=args.json,
+            fallback_print=lambda p: _print_api_calls(p["dex"]["api_calls"]),
+        )
 
     # -------------------------
     # Stage 3 – API sets
@@ -81,7 +115,9 @@ def run(args: Namespace) -> int:
                 "api_sets": api_sets,
             }
         }
-        return _emit(payload, as_json=args.json, fallback_print=_print_api_sets)
+        return _emit(
+            payload, as_json=args.json, fallback_print=_print_api_sets
+        )
 
     # -------------------------
     # Stage 4 – API sequences
@@ -95,7 +131,9 @@ def run(args: Namespace) -> int:
                 "api_sequences": api_seq,
             }
         }
-        return _emit(payload, as_json=args.json, fallback_print=_print_api_sequences)
+        return _emit(
+            payload, as_json=args.json, fallback_print=_print_api_sequences
+        )
 
     # -------------------------
     # Default summary
@@ -162,6 +200,7 @@ def _print_api_calls(api_calls: List[Dict[str, Any]]) -> None:
             f'{caller["class"]}->{caller["method"]}{caller["proto"]}  ->  '
             f'{callee["class"]}->{callee["method"]}{callee["proto"]}'
         )
+
 
 def _print_api_sets(payload: Dict[str, Any]) -> None:
     api_sets = payload["dex"]["api_sets"]

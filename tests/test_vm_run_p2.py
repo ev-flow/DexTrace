@@ -27,8 +27,10 @@ from unittest.mock import patch
 
 import pytest
 
-FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "p2_fib_recursive.dex"
-ENTRY   = "Lp2/Fib;->fib(I)I"
+FIXTURE = (
+    Path(__file__).parent / "fixtures" / "samples" / "p2_fib_recursive.dex"
+)
+ENTRY = "Lp2/Fib;->fib(I)I"
 
 
 def test_fixture_exists():
@@ -95,7 +97,17 @@ class TestVMRunP2:
 
         buf = io.StringIO()
         with patch("sys.stdout", buf):
-            rc = main(["run", str(FIXTURE), "--entry", ENTRY, "--arg", "10", "--json"])
+            rc = main(
+                [
+                    "run",
+                    str(FIXTURE),
+                    "--entry",
+                    ENTRY,
+                    "--arg",
+                    "10",
+                    "--json",
+                ]
+            )
 
         assert rc == 0
         doc = json.loads(buf.getvalue())
@@ -108,6 +120,8 @@ class TestVMRunP2:
         for n, expected in [(0, 0), (1, 1)]:
             buf = io.StringIO()
             with patch("sys.stdout", buf):
-                rc = main(["run", str(FIXTURE), "--entry", ENTRY, "--arg", str(n)])
+                rc = main(
+                    ["run", str(FIXTURE), "--entry", ENTRY, "--arg", str(n)]
+                )
             assert rc == 0
             assert buf.getvalue().strip() == f"return: {expected}"

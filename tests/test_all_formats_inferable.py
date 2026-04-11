@@ -4,8 +4,13 @@
 
 
 from dextrace.dalvik.bytecode_source import load_bytecode_lines
-from dextrace.dalvik.opcode_table_builder import build_opcode_format_map_from_bytecode_lines
-from dextrace.dalvik.format_size_infer import infer_format_size_units  # 依你專案實際 import
+from dextrace.dalvik.opcode_table_builder import (
+    build_opcode_format_map_from_bytecode_lines,
+)
+from dextrace.dalvik.format_size_infer import (
+    infer_format_size_units,
+)  # 依你專案實際 import
+
 
 def test_all_formats_in_bytecode_txt_are_inferable():
     lines = load_bytecode_lines()

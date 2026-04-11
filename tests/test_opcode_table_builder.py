@@ -9,11 +9,13 @@ from dextrace.dalvik.opcode_table_builder import (
     build_opcode_info_table_from_bytecode_lines,
 )
 
+
 def test_build_opcode_format_map_from_bytecode_txt():
     lines = load_bytecode_lines()
     fmt_map = build_opcode_format_map_from_bytecode_lines(lines)
     assert isinstance(fmt_map, dict)
     assert fmt_map  # not empty
+
 
 def test_build_opcode_info_table_flags_and_fields():
     lines = load_bytecode_lines()

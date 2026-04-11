@@ -21,7 +21,9 @@ from dextrace.vm.state import VMState
 from dextrace.vm.engine import _ReturnSignal
 
 
-def _insn(uoff, mnemonic, regs=None, param=None, size_units=1, target_uoff=None):
+def _insn(
+    uoff, mnemonic, regs=None, param=None, size_units=1, target_uoff=None
+):
     return DecodedInsn(
         uoff=uoff,
         byte_off=uoff * 2,

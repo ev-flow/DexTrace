@@ -35,7 +35,9 @@ def _find_code_item_off_via_map_list(dex_bytes: bytes) -> int:
 def test_disassembler_outputs_smali_hex_and_context_prev_next_1():
     dex_bytes = build_minimal_test_dex()
     resolver = DexResolver(dex_bytes)
-    dis = DalvikDisassembler(dex_bytes=dex_bytes, resolver=resolver, accept_optimized=False)
+    dis = DalvikDisassembler(
+        dex_bytes=dex_bytes, resolver=resolver, accept_optimized=False
+    )
 
     code_off = _find_code_item_off_via_map_list(dex_bytes)
     md = dis.disassemble_method(code_off)
@@ -56,7 +58,10 @@ def test_disassembler_outputs_smali_hex_and_context_prev_next_1():
     # --- smali must be resolved (method/string) ---
     assert ins0.smali == "invoke-direct {v0}, Ljava/lang/Object;-><init>()V"
     assert ins1.smali == 'const-string v1, "HELLO"'
-    assert ins2.smali == "invoke-virtual {v0,v1}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;"
+    assert (
+        ins2.smali
+        == "invoke-virtual {v0,v1}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;"
+    )
     assert ins3.smali == "return-void"
 
     # --- hex formatting: space-separated pairs ---
@@ -67,8 +72,10 @@ def test_disassembler_outputs_smali_hex_and_context_prev_next_1():
     assert hex_re.match(ins3.raw_hex)
 
     # strong checks for two well-known instructions
-    assert ins0.raw_hex == "70 10 00 00 00 00"   # invoke-direct 35c (3 units => 6 bytes)
-    assert ins3.raw_hex == "0e 00"               # return-void 10x (1 unit => 2 bytes)
+    assert (
+        ins0.raw_hex == "70 10 00 00 00 00"
+    )  # invoke-direct 35c (3 units => 6 bytes)
+    assert ins3.raw_hex == "0e 00"  # return-void 10x (1 unit => 2 bytes)
 
     # --- context prev/next 1 ---
     # ins0 has only next

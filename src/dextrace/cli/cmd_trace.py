@@ -37,9 +37,6 @@ def register(p: argparse.ArgumentParser) -> None:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _load_dex_bytes(input_path: Path) -> tuple[bytes, str]:
-    return load_dex_bytes(input_path)
-
 
 def _insn_to_dict(ins) -> Dict[str, Any]:
     """Serialize a DecodedInsn to a JSON-safe dict; omit None/empty fields."""
@@ -69,6 +66,7 @@ def _insn_to_dict(ins) -> Dict[str, Any]:
 # Subcommand handler
 # ---------------------------------------------------------------------------
 
+
 def run(args: argparse.Namespace) -> int:
     input_path = Path(args.input)
     if not input_path.exists():
@@ -79,7 +77,7 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        dex_bytes, dex_name = _load_dex_bytes(input_path)
+        dex_bytes, dex_name = load_dex_bytes(input_path)
     except SystemExit as e:
         print(f"[ERROR] {e}", file=sys.stderr)
         return 3

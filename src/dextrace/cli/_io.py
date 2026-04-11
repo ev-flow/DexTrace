@@ -11,6 +11,8 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
+from dextrace.core.apk_reader import ApkReader
+
 
 def load_dex_bytes(input_path: Path) -> tuple[bytes, str]:
     """
@@ -24,10 +26,11 @@ def load_dex_bytes(input_path: Path) -> tuple[bytes, str]:
 
     # APK branch: extract classes.dex from the ZIP archive.
     try:
-        from dextrace.core.apk_reader import ApkReader
         apk = ApkReader(str(input_path))
-    except zipfile.BadZipFile:
-        raise SystemExit(f"not a valid APK (bad zip): {input_path.name}")
+    except zipfile.BadZipFile as exc:
+        raise SystemExit(
+            f"not a valid APK (bad zip): {input_path.name}"
+        ) from exc
 
     if "classes.dex" not in apk.list_entries():
         raise SystemExit("APK does not contain classes.dex")
