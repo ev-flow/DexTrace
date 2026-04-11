@@ -41,10 +41,9 @@ def _load_dex_bytes(input_path: Path) -> tuple[bytes, str]:
     if input_path.suffix.lower() == ".dex":
         return input_path.read_bytes(), input_path.name
     apk = ApkReader(str(input_path))
-    dex_bytes = apk.read_file("classes.dex")
-    if not dex_bytes:
+    if "classes.dex" not in apk.list_entries():
         raise SystemExit("APK does not contain classes.dex")
-    return dex_bytes, "classes.dex"
+    return apk.read_file("classes.dex"), "classes.dex"
 
 
 def _insn_to_dict(ins) -> Dict[str, Any]:
