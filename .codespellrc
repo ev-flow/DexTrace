@@ -1,0 +1,3 @@
+[codespell]
+# iput / iget are Dalvik opcodes (instance-field put/get), not misspellings.
+ignore-words-list = iput,iget
