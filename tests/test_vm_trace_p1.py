@@ -23,7 +23,6 @@ import pytest
 
 FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "p1_const_return.dex"
 ENTRY = "Lp1;->main()I"
-ROOT = Path(__file__).parent.parent
 
 
 # ---------------------------------------------------------------------------

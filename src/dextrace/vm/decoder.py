@@ -12,18 +12,12 @@ cmd_trace.py imports only this module from vm/.
 from __future__ import annotations
 
 import struct
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.dalvik.disassembler import DalvikDisassembler
-from dextrace.dalvik.opcode_table_builder import OpcodeInfo
 from dextrace.dalvik.types import DecodedInsn
-
-
-# DecoderTables: opcode -> OpcodeInfo, built once per DalvikVM instance (P1+).
-# cmd_trace.py does not use this directly; it is here for the engine (P1).
-DecoderTables = Dict[int, OpcodeInfo]
 
 
 class MethodNotFound(Exception):
@@ -53,7 +47,7 @@ def walk_method(
             resolver = DexResolver(dex_bytes)
 
         sig_to_codeoff = build_sig_to_codeoff_map(dex_bytes, resolver)
-    except (ValueError, struct.error) as e:
+    except (ValueError, struct.error, IndexError, KeyError, OverflowError) as e:
         raise DexParseError(str(e)) from e
 
     code_off = sig_to_codeoff.get(entry_sig)
@@ -64,7 +58,7 @@ def walk_method(
     try:
         dis = DalvikDisassembler(dex_bytes=dex_bytes, resolver=resolver)
         method = dis.disassemble_method(code_off)
-    except (ValueError, struct.error) as e:
+    except (ValueError, struct.error, IndexError, KeyError, OverflowError) as e:
         raise DexParseError(str(e)) from e
 
     return method.instructions

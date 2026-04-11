@@ -15,8 +15,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import zipfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from dextrace.core.apk_reader import ApkReader
 from dextrace.vm.decoder import DexParseError, MethodNotFound, walk_method
@@ -40,7 +41,10 @@ def register(p: argparse.ArgumentParser) -> None:
 def _load_dex_bytes(input_path: Path) -> tuple[bytes, str]:
     if input_path.suffix.lower() == ".dex":
         return input_path.read_bytes(), input_path.name
-    apk = ApkReader(str(input_path))
+    try:
+        apk = ApkReader(str(input_path))
+    except zipfile.BadZipFile:
+        raise SystemExit(f"not a valid APK (bad zip): {input_path.name}")
     if "classes.dex" not in apk.list_entries():
         raise SystemExit("APK does not contain classes.dex")
     return apk.read_file("classes.dex"), "classes.dex"
@@ -60,8 +64,11 @@ def _insn_to_dict(ins) -> Dict[str, Any]:
         d["index"] = ins.index
     if ins.index_type is not None:
         d["index_type"] = ins.index_type
-    if ins.flags:
-        d["flags"] = sorted(ins.flags)
+    # Emit flags only when they carry information beyond the default "falls through".
+    # "continue" alone means "sequential instruction" — that's the default; omit it.
+    significant_flags = ins.flags - {"continue"}
+    if significant_flags:
+        d["flags"] = sorted(significant_flags)
     if ins.target_uoff is not None:
         d["target_uoff"] = ins.target_uoff
     return d
@@ -75,6 +82,9 @@ def run(args: argparse.Namespace) -> int:
     input_path = Path(args.input)
     if not input_path.exists():
         print(f"[ERROR] input not found: {input_path}", file=sys.stderr)
+        return 1
+    if not input_path.is_file():
+        print(f"[ERROR] not a file: {input_path}", file=sys.stderr)
         return 1
 
     try:
@@ -95,7 +105,7 @@ def run(args: argparse.Namespace) -> int:
     out: Dict[str, Any] = {
         "version": 1,
         "format": "trace",
-        "source": {"input": str(input_path), "dex": dex_name},
+        "source": {"input": str(input_path.resolve()), "dex": dex_name},
         "method": args.entry,
         "instructions": [_insn_to_dict(ins) for ins in instructions],
     }

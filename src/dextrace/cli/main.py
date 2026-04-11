@@ -11,6 +11,7 @@ from dextrace.cli import cmd_meta
 from dextrace.cli import cmd_dex
 from dextrace.cli import cmd_disasm
 from dextrace.cli import cmd_trace
+from dextrace.cli import cmd_run
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -65,6 +66,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Walk a method statically — decode every instruction (no execution)",
     )
     cmd_trace.register(p_trace)
+
+    # -------------------------
+    # run subcommand
+    # -------------------------
+    p_run = subparsers.add_parser(
+        "run",
+        help="Execute a method in the Dalvik VM interpreter",
+    )
+    cmd_run.register(p_run)
 
     return parser
 

@@ -93,3 +93,24 @@ def test_cli_apk_no_classes_dex_exits_3(tmp_path):
     assert rc == 3
     assert "[ERROR]" in stderr_buf.getvalue()
     assert "classes.dex" in stderr_buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# REVIEW-001: non-.dex non-ZIP file hits ApkReader and raises uncaught BadZipFile
+# ---------------------------------------------------------------------------
+
+def test_cli_non_zip_non_dex_exits_3(tmp_path):
+    """
+    Review finding: a file that is neither a valid DEX nor a valid ZIP hits
+    ApkReader.__init__ which raises zipfile.BadZipFile. Previously this
+    propagated as an uncaught exception. Now it must exit 3 with [ERROR].
+    """
+    bad_apk = tmp_path / "not_a_zip.apk"
+    bad_apk.write_bytes(b"this is not a zip archive")
+
+    stderr_buf = io.StringIO()
+    with patch("sys.stderr", stderr_buf):
+        rc = main(["trace", str(bad_apk), "--entry", "Lp1;->main()I"])
+
+    assert rc == 3
+    assert "[ERROR]" in stderr_buf.getvalue()
