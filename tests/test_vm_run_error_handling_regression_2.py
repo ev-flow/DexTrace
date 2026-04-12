@@ -25,7 +25,7 @@ from dextrace.cli.main import main
 FIXTURE_P1 = (
     Path(__file__).parent / "fixtures" / "samples" / "p1_const_return.dex"
 )
-ENTRY_P1 = "Lp1;->main()I"
+ENTRY_P1 = "Lp1;->main()V"
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ def test_cli_run_apk_with_classes_dex_succeeds(tmp_path):
         rc = main(["run", str(apk), "--entry", ENTRY_P1])
 
     assert rc == 0
-    assert "42" in stdout_buf.getvalue()
+    assert "return: void" in stdout_buf.getvalue()
 
 
 def test_cli_run_apk_no_classes_dex_exits_3(tmp_path):

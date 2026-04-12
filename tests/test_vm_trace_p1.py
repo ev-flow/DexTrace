@@ -6,11 +6,11 @@
 Week 1 / Phase 1 verification tests for dextrace trace + vm/decoder.
 
 Fixture: tests/fixtures/samples/p1_const_return.dex
-  class Lp1; { public static int main() { const/16 v0, 42; return v0; } }
+  class Lp1; { public static void main() { const/16 v0, 42; return-void; } }
 
 One-liner verification (from design doc):
   python -m dextrace trace tests/fixtures/samples/p1_const_return.dex \
-      --entry 'Lp1;->main()I' | python -c \
+      --entry 'Lp1;->main()V' | python -c \
       "import sys,json; r=json.load(sys.stdin); assert r['instructions'][0]['mnemonic']=='const/16'"
 """
 
@@ -24,7 +24,7 @@ import pytest
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "samples" / "p1_const_return.dex"
 )
-ENTRY = "Lp1;->main()I"
+ENTRY = "Lp1;->main()V"
 
 
 # ---------------------------------------------------------------------------
@@ -45,11 +45,11 @@ def test_walk_method_first_mnemonic():
 
 
 def test_walk_method_last_mnemonic():
-    """Last instruction of main() must be return."""
+    """Last instruction of main() must be return-void."""
     from dextrace.vm.decoder import walk_method
 
     insns = walk_method(FIXTURE.read_bytes(), ENTRY)
-    assert insns[-1].mnemonic == "return"
+    assert insns[-1].mnemonic == "return-void"
 
 
 def test_walk_method_instruction_count():

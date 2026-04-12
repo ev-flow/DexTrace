@@ -672,5 +672,5 @@ class TestStalePendingResultCleared:
         # external stub result that was never consumed).
         # Then verify that run() still succeeds (it resets pending_result=None
         # at entry per OV-2).
-        result = vm.run("Lp1;->main()I", args=[])
-        assert result == 42
+        result = vm.run("Lp1;->main()V", args=[])
+        assert result is None

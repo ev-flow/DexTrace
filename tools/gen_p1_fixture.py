@@ -6,9 +6,9 @@ Build tests/fixtures/samples/p1_const_return.dex programmatically.
 
 DEX contains one class and one method:
   class:  Lp1;  (extends Ljava/lang/Object;)
-  method: public static int main()
+  method: public static void main()
   body:   const/16 v0, 42
-          return v0
+          return-void
 """
 
 import hashlib
@@ -44,42 +44,42 @@ def build_p1_dex() -> (
 ):  # pylint: disable=too-many-locals,too-many-statements
     # -----------------------------------------------------------------------
     # String table (must be sorted by Unicode code point — DEX requirement)
-    # "I" < "Ljava/lang/Object;" < "Lp1;" < "main"
+    # "Ljava/lang/Object;" < "Lp1;" < "V" < "main"
     # -----------------------------------------------------------------------
-    strings = ["I", "Ljava/lang/Object;", "Lp1;", "main"]
-    # indices:   0          1               2       3
+    strings = ["Ljava/lang/Object;", "Lp1;", "V", "main"]
+    # indices:        0                  1      2     3
 
     # -----------------------------------------------------------------------
     # Type IDs (sorted by string index)
-    # type_idx 0 -> string_idx 0  = "I"
-    # type_idx 1 -> string_idx 1  = "Ljava/lang/Object;"
-    # type_idx 2 -> string_idx 2  = "Lp1;"
+    # type_idx 0 -> string_idx 0  = "Ljava/lang/Object;"
+    # type_idx 1 -> string_idx 1  = "Lp1;"
+    # type_idx 2 -> string_idx 2  = "V"
     # -----------------------------------------------------------------------
     type_string_ids = [0, 1, 2]
 
     # -----------------------------------------------------------------------
     # Proto IDs
-    # proto 0: ()I  — shorty="I"(0), return_type=type"I"(0), params_off=0
+    # proto 0: ()V  — shorty="V"(2), return_type=type"V"(2), params_off=0
     # -----------------------------------------------------------------------
     # (shorty_string_idx, return_type_idx, parameters_off)
-    proto_ids = [(0, 0, 0)]
+    proto_ids = [(2, 2, 0)]
 
     # -----------------------------------------------------------------------
     # Method IDs
-    # method 0: Lp1;->main()I
-    #   class_idx=2  proto_idx=0  name_string_idx=3
+    # method 0: Lp1;->main()V
+    #   class_idx=1  proto_idx=0  name_string_idx=3
     # -----------------------------------------------------------------------
     # (class_type_idx, proto_idx, name_string_idx)
-    method_ids = [(2, 0, 3)]
+    method_ids = [(1, 0, 3)]
 
     # -----------------------------------------------------------------------
-    # Instructions:  const/16 v0, #42 ; return v0
-    #   const/16  opcode=0x13 fmt=21s: (vA<<8)|op  BBBB
-    #             v0: (0<<8)|0x13 = 0x0013, literal = 42 = 0x002A
-    #   return    opcode=0x0F fmt=11x: (vA<<8)|op
-    #             v0: (0<<8)|0x0F = 0x000F
+    # Instructions:  const/16 v0, #42 ; return-void
+    #   const/16   opcode=0x13 fmt=21s: (vA<<8)|op  BBBB
+    #              v0: (0<<8)|0x13 = 0x0013, literal = 42 = 0x002A
+    #   return-void opcode=0x0E fmt=10x: (0<<8)|op
+    #              0x000E
     # -----------------------------------------------------------------------
-    insns = [0x0013, 0x002A, 0x000F]
+    insns = [0x0013, 0x002A, 0x000E]
 
     header_size = 0x70  # pylint: disable=invalid-name
 
@@ -183,9 +183,9 @@ def build_p1_dex() -> (
     # class_def_item (32 bytes)
     class_def_item = struct.pack(
         "<IIIIIIII",
-        2,  # class_idx -> "Lp1;"
+        1,  # class_idx -> "Lp1;"
         0x1,  # access_flags: public
-        1,  # superclass_idx -> "Ljava/lang/Object;"
+        0,  # superclass_idx -> "Ljava/lang/Object;"
         0,  # interfaces_off
         0xFFFFFFFF,  # source_file_idx: NO_INDEX
         0,  # annotations_off

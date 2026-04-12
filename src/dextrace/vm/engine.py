@@ -124,6 +124,8 @@ class DalvikVM:
         self._eval["return-wide"] = _handle_return_wide
         self._eval["return-object"] = _handle_return_object
 
+        self._final_state: Optional[VMState] = None
+
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
@@ -157,7 +159,14 @@ class DalvikVM:
         state = VMState(registers=rf, pc=0)
         state.pending_result = None  # OV-2: clear at entry
 
-        return self._execute(code_off, state)
+        result = self._execute(code_off, state)
+        self._final_state = state
+        return result
+
+    @property
+    def final_registers(self) -> Optional[RegisterFile]:
+        """Register file of the top-level frame after the last run() call."""
+        return self._final_state.registers if self._final_state else None
 
     # ------------------------------------------------------------------
     # Core execution loop

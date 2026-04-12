@@ -57,6 +57,11 @@ def register(p: argparse.ArgumentParser) -> None:
         help="Output result as JSON to stdout",
     )
     p.add_argument(
+        "--dump-regs",
+        action="store_true",
+        help="Print non-zero register values after execution",
+    )
+    p.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -151,6 +156,9 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
     else:
         _print_text(result)
 
+    if args.dump_regs:
+        _print_registers(vm.final_registers)
+
     return 0
 
 
@@ -172,6 +180,15 @@ def _print_text(result) -> None:
 def _print_json(result) -> None:
     """JSON output: 2-space indent, ensure_ascii=False."""
     print(json.dumps({"return": result}, indent=2, ensure_ascii=False))
+
+
+def _print_registers(rf) -> None:
+    """Print non-zero register values to stdout."""
+    if rf is None:
+        return
+    parts = [f"v{i}={rf.get(i)}" for i in range(len(rf)) if rf.get(i) != 0]
+    if parts:
+        print("registers: " + "  ".join(parts))
 
 
 # ---------------------------------------------------------------------------
