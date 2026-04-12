@@ -11,14 +11,17 @@ type_conv, and move/move-result.
 
 from __future__ import annotations
 
-import math
 import struct
+from pathlib import Path
 
 import pytest
 
+from dextrace.core.dex_code_map import build_sig_to_codeoff_map
+from dextrace.core.dex_resolver import DexResolver
 from dextrace.dalvik.types import DecodedInsn
-from dextrace.vm.errors import DexTraceVMError, DexTraceNotImplementedError
-from dextrace.vm.handlers import arithmetic, branch, compare, type_conv, move
+from dextrace.vm.engine import DalvikVM
+from dextrace.vm.errors import DexTraceNotImplementedError, DexTraceVMError
+from dextrace.vm.handlers import arithmetic, branch, compare, move, type_conv
 from dextrace.vm.register_file import RegisterFile
 from dextrace.vm.state import VMState
 
@@ -653,13 +656,7 @@ class TestStalePendingResultCleared:
         move-result. Verify that the engine clears it before the internal
         invoke stale guard runs (which would previously raise VMError).
         """
-        from dextrace.core.dex_parser import DexParser
-        from dextrace.core.dex_resolver import DexResolver
-        from dextrace.core.dex_code_map import build_sig_to_codeoff_map
-        from dextrace.vm.engine import DalvikVM
-        from pathlib import Path
-
-        # Use the P2 fixture which has recursive calls (internal callees)
+        # Use the P1 fixture (simple const-return, no external calls needed)
         fixture = (
             Path(__file__).parent.parent
             / "fixtures"

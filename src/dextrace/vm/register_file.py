@@ -57,5 +57,5 @@ class RegisterFile:
     def snapshot(self) -> "RegisterFile":
         """Return a new RegisterFile with copied register values (shallow int copy)."""
         snap = RegisterFile(len(self._regs))
-        snap._regs = list(self._regs)
+        snap._regs = list(self._regs)  # pylint: disable=protected-access
         return snap

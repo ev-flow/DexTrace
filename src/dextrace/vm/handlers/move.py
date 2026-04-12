@@ -21,7 +21,9 @@ from dextrace.vm.state import VMState
 # ---------------------------------------------------------------------------
 
 
-def handle_nop(insn: DecodedInsn, state: VMState) -> None:
+def handle_nop(  # pylint: disable=unused-argument
+    insn: DecodedInsn, state: VMState
+) -> None:
     pass
 
 

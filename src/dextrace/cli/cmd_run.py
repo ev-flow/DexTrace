@@ -65,7 +65,9 @@ def register(p: argparse.ArgumentParser) -> None:
     p.set_defaults(func=run)
 
 
-def run(args: argparse.Namespace) -> int:
+def run(  # pylint: disable=too-many-return-statements,too-many-branches
+    args: argparse.Namespace,
+) -> int:
     input_path = Path(args.input)
     if not input_path.exists():
         _err(f"file not found: {input_path}")

@@ -17,16 +17,16 @@ from pathlib import Path
 
 
 def _uleb128(n: int) -> bytes:
-    out = bytearray()
+    buf = bytearray()
     while True:
         b = n & 0x7F
         n >>= 7
         if n:
-            out.append(b | 0x80)
+            buf.append(b | 0x80)
         else:
-            out.append(b)
+            buf.append(b)
             break
-    return bytes(out)
+    return bytes(buf)
 
 
 def _align4(off: int) -> int:
@@ -38,7 +38,9 @@ def _string_data_item(s: str) -> bytes:
     return _uleb128(len(s)) + b + b"\x00"
 
 
-def build_p1_dex() -> bytes:
+def build_p1_dex() -> (
+    bytes
+):  # pylint: disable=too-many-locals,too-many-statements
     # -----------------------------------------------------------------------
     # String table (must be sorted by Unicode code point — DEX requirement)
     # "I" < "Ljava/lang/Object;" < "Lp1;" < "main"
@@ -78,10 +80,10 @@ def build_p1_dex() -> bytes:
     # -----------------------------------------------------------------------
     insns = [0x0013, 0x002A, 0x000F]
 
-    HEADER_SIZE = 0x70
+    header_size = 0x70  # pylint: disable=invalid-name
 
     # ---- lay out fixed sections ----
-    off = HEADER_SIZE
+    off = header_size
 
     string_ids_off = off
     off += len(strings) * 4
@@ -191,10 +193,10 @@ def build_p1_dex() -> bytes:
     )
 
     # ---- header ----
-    header = bytearray(HEADER_SIZE)
+    header = bytearray(header_size)
     header[0:8] = b"dex\n035\x00"
     struct.pack_into("<I", header, 32, file_size)
-    struct.pack_into("<I", header, 36, HEADER_SIZE)
+    struct.pack_into("<I", header, 36, header_size)
     struct.pack_into("<I", header, 40, 0x12345678)  # endian_tag
     struct.pack_into("<I", header, 44, 0)  # link_size
     struct.pack_into("<I", header, 48, 0)  # link_off
