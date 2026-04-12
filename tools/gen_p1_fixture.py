@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# pylint: disable=duplicate-code  # gen_p1/p2 share DEX builder boilerplate intentionally
 """
 Build tests/fixtures/samples/p1_const_return.dex programmatically.
 
