@@ -146,10 +146,10 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
     try:
         result = vm.run(entry_sig, args.args)
     except DexTraceNotImplementedError as exc:
-        _err(f"not implemented: {exc}")
+        _err(str(exc))
         return 2
     except DexTraceVMError as exc:
-        _err(f"VM error: {exc}")
+        _err(str(exc))
         return 2
     except Exception as exc:  # pylint: disable=broad-exception-caught
         _err(f"internal error: {exc}")
