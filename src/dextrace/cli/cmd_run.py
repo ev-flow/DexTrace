@@ -133,7 +133,12 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
         return 1
 
     # --- Run -------------------------------------------------------------
-    vm = DalvikVM(dex_bytes, resolver, sig_to_codeoff)
+    vm = DalvikVM(
+        dex_bytes,
+        resolver,
+        sig_to_codeoff,
+        trace_sink=_info if args.verbose else None,
+    )
 
     if args.verbose:
         _info(f"executing {entry_sig} with args={args.args}")

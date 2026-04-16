@@ -77,11 +77,18 @@ stdout is data only (JSON or return value). All messages go to stderr.
 [ERROR] method not found: Lp1;->missing()I
 [ERROR] unimplemented opcode: monitor-enter (pc=0x0006)
 [ERROR] call stack overflow at Lp2;->infinite()V (depth 500)
-[WARN]  (reserved for P3+)
+[ERROR] null receiver: invoke-virtual at pc=0x0008
+[ERROR] abstract method: Lp3/Base;->abstractFoo()I has no implementation
+[ERROR] invoke-interface not implemented: Lp3/IFoo;->bar()I (pc=0x000a)
+[ERROR] vtable miss: Lp3/Mid; has no method foo()I
+[WARN]  (reserved for future use)
 [INFO]  loading DEX: classes.dex (4.2 MB)         ← --verbose only
 [INFO]  building class hierarchy: 9842 classes     ← --verbose only
 [INFO]  resolving entry: Lp4/Cmd;->buildUrl()...   ← --verbose only
 [INFO]  executing...                                ← --verbose only
+[INFO]  new-instance: Lp3/Mid; → handle #1                           ← --verbose only
+[INFO]  invoke-virtual: Lp3/Base;->foo()I → Lp3/Mid;->foo()I         ← --verbose only
+[INFO]  invoke-super: Lp3/Mid;->foo()I → Lp3/Base;->foo()I           ← --verbose only
 ```
 
 - Fixed-width prefix brackets: `[ERROR]` (7 chars), `[WARN] ` (7 chars), `[INFO] ` (7 chars)
@@ -119,3 +126,6 @@ Terminal-native. No font choices — the user's terminal font applies. All outpu
 | 2026-04-11 | No --color by default | Dropped: adds Rich dependency without enough gain for P1/P2 scope |
 | 2026-04-11 | No --short-sigs flag | Dropped: formatting layer overhead not worth it for P1/P2 scope |
 | 2026-04-11 | Created by /design-consultation | CLI output design system for dextrace trace + dextrace run |
+| 2026-04-16 | P3 [ERROR] messages for vtable failures | Null receiver, abstract method, invoke-interface, vtable miss each surface as clean [ERROR] with pc context — never a Python traceback |
+| 2026-04-16 | invoke-virtual [INFO] trace shows resolved method | `invoke-virtual: Lp3/Base;->foo()I → Lp3/Mid;->foo()I` makes vtable dispatch visible in --verbose; essential for malware analysis debugging |
+| 2026-04-16 | [WARN] no longer "reserved for P3+" | P3 errors go to [ERROR]; [WARN] remains reserved for future ambiguous-but-non-fatal conditions |

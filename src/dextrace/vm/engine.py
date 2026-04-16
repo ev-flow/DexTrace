@@ -27,14 +27,16 @@ Execution loop invariant:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from dextrace.core.dex_parser import DexParser
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.dalvik.disassembler import DalvikDisassembler, MethodDisasm
 from dextrace.dalvik.types import DecodedInsn
 from dextrace.vm.call_frame import CallFrame
+from dextrace.vm.class_hierarchy import ClassHierarchy
 from dextrace.vm.errors import DexTraceVMError, DexTraceNotImplementedError
+from dextrace.vm.heap import ObjectHeap
 from dextrace.vm.int_ops import reg_index
 from dextrace.vm.register_file import RegisterFile
 from dextrace.vm.state import VMState
@@ -101,6 +103,7 @@ class DalvikVM:
         dex_bytes: bytes,
         resolver: DexResolver,
         sig_to_codeoff: Dict[str, int],
+        trace_sink: Optional[Callable[[str], None]] = None,
     ) -> None:
         self._parser = DexParser(dex_bytes)
         self._disasm = DalvikDisassembler(dex_bytes, resolver)
@@ -108,6 +111,13 @@ class DalvikVM:
 
         # instruction cache: code_off -> List[DecodedInsn]
         self._insn_cache: Dict[int, List[DecodedInsn]] = {}
+
+        # Optional verbose trace sink: called with human-readable [INFO] messages
+        self._trace_sink = trace_sink
+
+        # Object heap and class hierarchy for P3 dispatch
+        self._heap = ObjectHeap()
+        self._hierarchy = ClassHierarchy(dex_bytes, resolver)
 
         # eval table (invoke-* and return-* NOT here)
         self._eval: Dict[str, Any] = {}
@@ -123,6 +133,19 @@ class DalvikVM:
         self._eval["return"] = _handle_return
         self._eval["return-wide"] = _handle_return_wide
         self._eval["return-object"] = _handle_return_object
+
+        # new-instance: closure captures heap reference and trace sink
+        _heap_ref = self._heap
+        _sink_ref = self._trace_sink
+
+        def _handle_new_instance(insn: DecodedInsn, state: VMState) -> None:
+            class_desc = insn.param  # resolved type descriptor string
+            handle = _heap_ref.allocate(class_desc)
+            state.registers.set(reg_index(insn.regs[0]), handle)
+            if _sink_ref is not None:
+                _sink_ref(f"new-instance: {class_desc} → handle #{handle}")
+
+        self._eval["new-instance"] = _handle_new_instance
 
         self._final_state: Optional[VMState] = None
 
@@ -141,6 +164,7 @@ class DalvikVM:
         Raises DexTraceVMError on runtime errors.
         """
         args = args or []
+        self._heap.reset()  # isolate heap state between run() calls
 
         code_off = self._sig_to_codeoff.get(entry_sig)
         if code_off is None:
@@ -280,19 +304,47 @@ class DalvikVM:
                 f"{mnemonic} not implemented (pc={insn.uoff:#06x})"
             )
 
+        if mnemonic in ("invoke-interface", "invoke-interface/range"):
+            raise DexTraceNotImplementedError(
+                f"invoke-interface not implemented: {insn.param} (pc={insn.uoff:#06x})"
+            )
+
         callee_sig = insn.param
         if not callee_sig:
             raise DexTraceVMError(
                 f"invoke at pc={insn.uoff:#06x}: missing method signature"
             )
 
-        callee_code_off = self._sig_to_codeoff.get(callee_sig)
-        if callee_code_off is None:
-            # External — stub with 0 result (discard any stale external result
-            # since Dalvik does not require move-result for unused return values)
-            state.pending_result = 0
-            state.pending_result_is_wide = False
-            return None
+        if mnemonic in ("invoke-virtual", "invoke-virtual/range"):
+            # Vtable dispatch: resolve to runtime class's implementation.
+            receiver_handle = state.registers.get(reg_index(insn.regs[0]))
+            if receiver_handle == 0:
+                raise DexTraceVMError(
+                    f"null receiver: invoke-virtual at pc={insn.uoff:#06x}"
+                )
+            runtime_desc = self._heap.get_class(receiver_handle)
+            arrow_pos = callee_sig.index("->") + 2
+            method_part = callee_sig[arrow_pos:]
+            paren_pos = method_part.index("(")
+            vname = method_part[:paren_pos]
+            vproto = method_part[paren_pos:]
+            callee_code_off: Optional[int] = self._hierarchy.resolve_virtual(
+                runtime_desc, vname, vproto
+            )
+            if self._trace_sink is not None:
+                resolved_sig = f"{runtime_desc}->{vname}{vproto}"
+                if resolved_sig != callee_sig:
+                    self._trace_sink(
+                        f"invoke-virtual: {callee_sig} → {resolved_sig}"
+                    )
+        else:
+            callee_code_off = self._sig_to_codeoff.get(callee_sig)
+            if callee_code_off is None:
+                # External — stub with 0 result (discard any stale external result
+                # since Dalvik does not require move-result for unused return values)
+                state.pending_result = 0
+                state.pending_result_is_wide = False
+                return None
 
         # OV-3: stale pending_result guard — only applies to internal callees.
         # A prior external stub may have left pending_result=0 if the caller
