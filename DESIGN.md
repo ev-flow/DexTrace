@@ -81,6 +81,7 @@ stdout is data only (JSON or return value). All messages go to stderr.
 [ERROR] abstract method: Lp3/Base;->abstractFoo()I has no implementation
 [ERROR] invoke-interface not implemented: Lp3/IFoo;->bar()I (pc=0x000a)
 [ERROR] vtable miss: Lp3/Mid; has no method foo()I
+[ERROR] unknown Android API: Landroid/telephony/SmsManager;->getDefault()Landroid/telephony/SmsManager; (pc=0x0004)
 [WARN]  (reserved for future use)
 [INFO]  loading DEX: classes.dex (4.2 MB)         ← --verbose only
 [INFO]  building class hierarchy: 9842 classes     ← --verbose only
@@ -129,3 +130,4 @@ Terminal-native. No font choices — the user's terminal font applies. All outpu
 | 2026-04-16 | P3 [ERROR] messages for vtable failures | Null receiver, abstract method, invoke-interface, vtable miss each surface as clean [ERROR] with pc context — never a Python traceback |
 | 2026-04-16 | invoke-virtual [INFO] trace shows resolved method | `invoke-virtual: Lp3/Base;->foo()I → Lp3/Mid;->foo()I` makes vtable dispatch visible in --verbose; essential for malware analysis debugging |
 | 2026-04-16 | [WARN] no longer "reserved for P3+" | P3 errors go to [ERROR]; [WARN] remains reserved for future ambiguous-but-non-fatal conditions |
+| 2026-04-26 | P4 unknown-API error message includes full sig + pc | Analysts need to know exactly which Android API is missing a stub so they can either skip the entry, file an issue, or supply `--strict-stubs` to surface void misses too |
