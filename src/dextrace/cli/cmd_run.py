@@ -41,20 +41,47 @@ def register(p: argparse.ArgumentParser) -> None:
         metavar="SIG",
         help="Entry method signature, e.g. 'Lp1;->main()I'",
     )
+    # P4: --arg auto-detects int (decimal/0x hex) vs string. Repeat for
+    # multiple positional args. Mutually exclusive with --args.
     p.add_argument(
         "--arg",
         "-a",
         action="append",
-        type=int,
+        type=str,
         default=[],
-        metavar="N",
+        metavar="V",
         dest="args",
-        help="Integer argument (may be repeated for multiple args)",
+        help=(
+            "Method argument (int parsed from decimal or 0x-hex; "
+            "anything else is passed as a string). Repeat for multiple args."
+        ),
+    )
+    p.add_argument(
+        "--args",
+        metavar="JSON",
+        dest="args_json",
+        help=(
+            "JSON list of mixed int/string args, e.g. '[\"+10000\",\"hi\"]'. "
+            "Mutually exclusive with --arg."
+        ),
     )
     p.add_argument(
         "--json",
         action="store_true",
         help="Output result as JSON to stdout",
+    )
+    p.add_argument(
+        "--trace",
+        action="store_true",
+        help="Print captured Android-API stub calls as JSON to stdout",
+    )
+    p.add_argument(
+        "--strict-stubs",
+        action="store_true",
+        help=(
+            "Treat ALL external (unstubbed) API calls as errors, including "
+            "void ones. Default: void misses are silent no-ops."
+        ),
     )
     p.add_argument(
         "--dump-regs",
@@ -68,6 +95,27 @@ def register(p: argparse.ArgumentParser) -> None:
         help="Print [INFO] progress messages to stderr",
     )
     p.set_defaults(func=run)
+
+
+def _parse_one_arg(raw: str):
+    """
+    Auto-detect: 0x-hex int, signed decimal int, or string.
+
+    Treats anything with a leading '+' (e.g. phone numbers like '+15555550100')
+    as a string — Python's int() accepts '+' but the analyst almost never does,
+    so honoring it here would silently downgrade phone-number args to ints and
+    lose the IoC payload. Use --args '[...]' for explicit typing.
+    """
+    s = raw.strip()
+    if s.startswith(("0x", "0X", "-0x", "-0X")):
+        try:
+            return int(s, 16)
+        except ValueError:
+            return raw
+    body = s[1:] if s.startswith("-") else s
+    if body.isdigit():
+        return int(s, 10)
+    return raw
 
 
 def run(  # pylint: disable=too-many-return-statements,too-many-branches
@@ -132,19 +180,44 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
             _err(f"  ... and {len(sig_to_codeoff) - 20} more")
         return 1
 
+    # --- Resolve args: --arg (auto-detect) XOR --args (JSON list) --------
+    if args.args and args.args_json:
+        _err("--arg and --args are mutually exclusive")
+        return 1
+
+    if args.args_json is not None:
+        try:
+            method_args = json.loads(args.args_json)
+        except json.JSONDecodeError as exc:
+            _err(f"--args is not valid JSON: {exc}")
+            return 1
+        if not isinstance(method_args, list):
+            _err("--args must be a JSON list, e.g. '[1,\"hi\"]'")
+            return 1
+        for v in method_args:
+            if not isinstance(v, (int, str)):
+                _err(
+                    f"--args entries must be int or string, got "
+                    f"{type(v).__name__}: {v!r}"
+                )
+                return 1
+    else:
+        method_args = [_parse_one_arg(a) for a in args.args]
+
     # --- Run -------------------------------------------------------------
     vm = DalvikVM(
         dex_bytes,
         resolver,
         sig_to_codeoff,
         trace_sink=_info if args.verbose else None,
+        strict_stubs=args.strict_stubs,
     )
 
     if args.verbose:
-        _info(f"executing {entry_sig} with args={args.args}")
+        _info(f"executing {entry_sig} with args={method_args}")
 
     try:
-        result = vm.run(entry_sig, args.args)
+        result = vm.run(entry_sig, method_args)
     except DexTraceNotImplementedError as exc:
         _err(str(exc))
         return 2
@@ -157,9 +230,11 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
 
     # --- Output ----------------------------------------------------------
     if args.json:
-        _print_json(result)
+        _print_json(result, vm.api_calls if args.trace else None)
     else:
         _print_text(result)
+        if args.trace:
+            _print_trace(vm.api_calls)
 
     if args.dump_regs:
         _print_registers(vm.final_registers)
@@ -182,9 +257,17 @@ def _print_text(result) -> None:
         print(f"return: {result}")
 
 
-def _print_json(result) -> None:
+def _print_json(result, api_calls=None) -> None:
     """JSON output: 2-space indent, ensure_ascii=False."""
-    print(json.dumps({"return": result}, indent=2, ensure_ascii=False))
+    payload = {"return": result}
+    if api_calls is not None:
+        payload["api_calls"] = api_calls
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def _print_trace(api_calls) -> None:
+    """Print the captured stub-call trace as JSON to stdout."""
+    print(json.dumps({"api_calls": api_calls}, indent=2, ensure_ascii=False))
 
 
 def _print_registers(rf) -> None:
