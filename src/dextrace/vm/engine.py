@@ -33,6 +33,14 @@ from dextrace.core.dex_parser import DexParser
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.dalvik.disassembler import DalvikDisassembler, MethodDisasm
 from dextrace.dalvik.types import DecodedInsn
+from dextrace.vm.android_stubs import (
+    REGISTRY as DEFAULT_STUB_REGISTRY,
+    ObjectRef,
+    StubCallable,
+    Value,
+    VOID,
+    Wide,
+)
 from dextrace.vm.call_frame import CallFrame
 from dextrace.vm.class_hierarchy import ClassHierarchy
 from dextrace.vm.errors import DexTraceVMError, DexTraceNotImplementedError
@@ -104,6 +112,8 @@ class DalvikVM:
         resolver: DexResolver,
         sig_to_codeoff: Dict[str, int],
         trace_sink: Optional[Callable[[str], None]] = None,
+        stub_registry: Optional[Dict[str, StubCallable]] = None,
+        strict_stubs: bool = False,
     ) -> None:
         self._parser = DexParser(dex_bytes)
         self._disasm = DalvikDisassembler(dex_bytes, resolver)
@@ -118,6 +128,17 @@ class DalvikVM:
         # Object heap and class hierarchy for P3 dispatch
         self._heap = ObjectHeap()
         self._hierarchy = ClassHierarchy(dex_bytes, resolver)
+
+        # P4: Android-API stub registry (DI for tests; defaults to global REGISTRY)
+        # Strict mode escalates void external misses to errors as well.
+        self._stub_registry: Dict[str, StubCallable] = (
+            stub_registry if stub_registry is not None else DEFAULT_STUB_REGISTRY
+        )
+        self._strict_stubs = strict_stubs
+
+        # P4: every stub call appends one dict here. Reset at run() entry so
+        # consecutive vm.run() calls observe isolated trace logs.
+        self._api_calls: List[Dict[str, Any]] = []
 
         # eval table (invoke-* and return-* NOT here)
         self._eval: Dict[str, Any] = {}
@@ -156,15 +177,21 @@ class DalvikVM:
     def run(
         self,
         entry_sig: str,
-        args: Optional[List[int]] = None,
+        args: Optional[List[Union[int, str]]] = None,
     ) -> Optional[Union[int, str]]:
         """
-        Execute entry_sig with the given integer args.
+        Execute entry_sig with the given args.
+
+        Each arg is either an int (placed directly into the register) or a
+        str (materialized as a Ljava/lang/String; handle on the heap, with
+        the string stored as the handle's value so stubs can read it back).
+
         Returns the final return value (int, str, or None for void).
         Raises DexTraceVMError on runtime errors.
         """
         args = args or []
         self._heap.reset()  # isolate heap state between run() calls
+        self._api_calls.clear()
 
         code_off = self._sig_to_codeoff.get(entry_sig)
         if code_off is None:
@@ -173,9 +200,19 @@ class DalvikVM:
         code = self._parser.parse_code_item(code_off)
         rf = RegisterFile(code.registers_size)
 
+        # Materialize string args AFTER heap.reset() so the handles survive.
+        materialized: List[int] = []
+        for v in args:
+            if isinstance(v, str):
+                materialized.append(
+                    self._heap.allocate("Ljava/lang/String;", value=v)
+                )
+            else:
+                materialized.append(v)
+
         # Tail register convention: last ins_size registers hold args
         first_arg_reg = code.registers_size - code.ins_size
-        for i, v in enumerate(args):
+        for i, v in enumerate(materialized):
             dest = first_arg_reg + i
             if dest < code.registers_size:
                 rf.set(dest, v)
@@ -191,6 +228,11 @@ class DalvikVM:
     def final_registers(self) -> Optional[RegisterFile]:
         """Register file of the top-level frame after the last run() call."""
         return self._final_state.registers if self._final_state else None
+
+    @property
+    def api_calls(self) -> List[Dict[str, Any]]:
+        """Snapshot of stub-call trace entries from the last run()."""
+        return list(self._api_calls)
 
     # ------------------------------------------------------------------
     # Core execution loop
@@ -315,6 +357,14 @@ class DalvikVM:
                 f"invoke at pc={insn.uoff:#06x}: missing method signature"
             )
 
+        # P4: stub-first dispatch. Registry is keyed by the static (compile-time)
+        # callee signature, so it sits in front of both vtable resolution and
+        # the external-miss path.
+        stub = self._stub_registry.get(callee_sig)
+        if stub is not None:
+            self._invoke_stub(stub, callee_sig, insn, state)
+            return None
+
         if mnemonic in ("invoke-virtual", "invoke-virtual/range"):
             # Vtable dispatch: resolve to runtime class's implementation.
             receiver_handle = state.registers.get(reg_index(insn.regs[0]))
@@ -323,6 +373,13 @@ class DalvikVM:
                     f"null receiver: invoke-virtual at pc={insn.uoff:#06x}"
                 )
             runtime_desc = self._heap.get_class(receiver_handle)
+
+            # P4: invoke-virtual on an external (no-stub) class falls through
+            # to the external-miss policy instead of raising a vtable miss.
+            if not self._hierarchy.has_class(runtime_desc):
+                self._handle_external_miss(callee_sig, insn, state)
+                return None
+
             arrow_pos = callee_sig.index("->") + 2
             method_part = callee_sig[arrow_pos:]
             paren_pos = method_part.index("(")
@@ -340,10 +397,7 @@ class DalvikVM:
         else:
             callee_code_off = self._sig_to_codeoff.get(callee_sig)
             if callee_code_off is None:
-                # External — stub with 0 result (discard any stale external result
-                # since Dalvik does not require move-result for unused return values)
-                state.pending_result = 0
-                state.pending_result_is_wide = False
+                self._handle_external_miss(callee_sig, insn, state)
                 return None
 
         # OV-3: stale pending_result guard — only applies to internal callees.
@@ -380,6 +434,70 @@ class DalvikVM:
         state.pc = 0
 
         return callee_code_off
+
+    # ------------------------------------------------------------------
+    # P4: stub dispatch + external-miss policy
+    # ------------------------------------------------------------------
+
+    def _invoke_stub(
+        self,
+        stub: StubCallable,
+        callee_sig: str,
+        insn: DecodedInsn,
+        state: VMState,
+    ) -> None:
+        """Run a stub callable, capture its result into pending_result."""
+        stub_args: List[Any] = [
+            state.registers.get(reg_index(r)) for r in insn.regs
+        ]
+        try:
+            result = stub(stub_args, self._heap, self._api_calls)
+        except (DexTraceVMError, DexTraceNotImplementedError):
+            raise
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            raise DexTraceVMError(
+                f"stub failed for {callee_sig} (pc={insn.uoff:#06x}): {exc}"
+            ) from exc
+
+        if result is VOID:
+            # Void stubs leave a 0 in pending_result; OV-3's stale guard
+            # clears it before the next non-move-result instruction runs.
+            state.pending_result = 0
+            state.pending_result_is_wide = False
+        elif isinstance(result, Value):
+            state.pending_result = result.value
+            state.pending_result_is_wide = False
+        elif isinstance(result, Wide):
+            state.pending_result = result.value
+            state.pending_result_is_wide = True
+        elif isinstance(result, ObjectRef):
+            state.pending_result = result.handle
+            state.pending_result_is_wide = False
+        else:
+            raise DexTraceVMError(
+                f"stub for {callee_sig} returned unsupported type "
+                f"{type(result).__name__}"
+            )
+
+        if self._trace_sink is not None:
+            self._trace_sink(f"stub: {callee_sig}")
+
+    def _handle_external_miss(
+        self, callee_sig: str, insn: DecodedInsn, state: VMState
+    ) -> None:
+        """
+        Policy C: void external misses are silent no-ops; non-void misses
+        raise DexTraceNotImplementedError. --strict-stubs escalates void
+        misses to errors as well (option A semantics).
+        """
+        is_void = callee_sig.endswith(")V")
+        if self._strict_stubs or not is_void:
+            raise DexTraceNotImplementedError(
+                f"unknown Android API: {callee_sig} (pc={insn.uoff:#06x})"
+            )
+        # Legacy void-miss: stub with 0 (OV-3's stale guard cleans up).
+        state.pending_result = 0
+        state.pending_result_is_wide = False
 
     # ------------------------------------------------------------------
     # Instruction cache
