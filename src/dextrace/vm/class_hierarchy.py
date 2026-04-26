@@ -51,6 +51,15 @@ class ClassHierarchy:
     # Public API
     # ------------------------------------------------------------------
 
+    def has_class(self, class_desc: str) -> bool:
+        """
+        Return True if class_desc appears in the DEX (or as an in-DEX
+        class's superclass with an empty placeholder vtable). Used by the
+        engine to decide whether an invoke-virtual should fall through to
+        the external/stub path instead of raising a vtable miss.
+        """
+        return class_desc in self._vtables
+
     def resolve_virtual(self, class_desc: str, name: str, proto: str) -> int:
         """
         Return the code_off for the virtual method (name, proto) as inherited
