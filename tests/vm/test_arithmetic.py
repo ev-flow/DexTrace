@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 from dextrace.dalvik.types import DecodedInsn
 from dextrace.vm.errors import DexTraceVMError, DexTraceNotImplementedError
+from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.handlers.arithmetic import (
     handle_shr_int,
     handle_ushr_int,
@@ -82,18 +83,20 @@ class TestShiftSemantics:
 
 
 class TestDivisionErrors:
-    def test_div_by_zero_raises_vm_error_not_python_error(self):
-        """div-int by zero must raise DexTraceVMError, not ZeroDivisionError."""
+    def test_div_by_zero_raises_arithmetic_exception(self):
+        """div-int by zero raises _ThrowSignal(ArithmeticException), Java-faithful."""
         state = _make_state(0, 10, 0)
         insn = _make_insn(["v0", "v1", "v2"])
-        with pytest.raises(DexTraceVMError):
+        with pytest.raises(_ThrowSignal) as exc_info:
             handle_div_int(insn, state)
+        assert exc_info.value.class_desc == "Ljava/lang/ArithmeticException;"
 
-    def test_rem_by_zero_raises_vm_error(self):
+    def test_rem_by_zero_raises_arithmetic_exception(self):
         state = _make_state(0, 10, 0)
         insn = _make_insn(["v0", "v1", "v2"])
-        with pytest.raises(DexTraceVMError):
+        with pytest.raises(_ThrowSignal) as exc_info:
             handle_rem_int(insn, state)
+        assert exc_info.value.class_desc == "Ljava/lang/ArithmeticException;"
 
     def test_div_truncates_toward_zero(self):
         """Dalvik div: truncate-toward-zero, not floor division."""

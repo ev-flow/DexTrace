@@ -185,6 +185,23 @@ def handle_move_result_object(insn: DecodedInsn, state: VMState) -> None:
 
 
 # ---------------------------------------------------------------------------
+# move-exception (P5a)  — consume state.pending_exception
+# ---------------------------------------------------------------------------
+
+
+def handle_move_exception(insn: DecodedInsn, state: VMState) -> None:
+    if state.pending_exception is None:
+        raise DexTraceVMError(
+            "move-exception: no pending exception "
+            "(catch entered without a matched throw)"
+        )
+    dest = reg_index(insn.regs[0])
+    handle = state.pending_exception
+    state.pending_exception = None
+    state.registers.set(dest, handle)
+
+
+# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
@@ -213,3 +230,4 @@ def register(eval_table: dict) -> None:
     eval_table["move-result"] = handle_move_result
     eval_table["move-result-wide"] = handle_move_result_wide
     eval_table["move-result-object"] = handle_move_result_object
+    eval_table["move-exception"] = handle_move_exception

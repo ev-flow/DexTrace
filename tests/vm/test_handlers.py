@@ -21,6 +21,7 @@ from dextrace.core.dex_resolver import DexResolver
 from dextrace.dalvik.types import DecodedInsn
 from dextrace.vm.engine import DalvikVM
 from dextrace.vm.errors import DexTraceNotImplementedError, DexTraceVMError
+from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.handlers import arithmetic, branch, compare, move, type_conv
 from dextrace.vm.register_file import RegisterFile
 from dextrace.vm.state import VMState
@@ -116,21 +117,21 @@ class TestArithmetic2addrAndLit:
 
     def test_div_int_lit8_by_zero_raises(self) -> None:
         state = _state(0, 9)
-        with pytest.raises(DexTraceVMError):
+        with pytest.raises(_ThrowSignal):
             arithmetic.handle_div_int_lit8(
                 _insn(["v0", "v1"], param="0"), state
             )
 
     def test_div_int_lit16_by_zero_raises(self) -> None:
         state = _state(0, 9)
-        with pytest.raises(DexTraceVMError):
+        with pytest.raises(_ThrowSignal):
             arithmetic.handle_div_int_lit16(
                 _insn(["v0", "v1"], param="0"), state
             )
 
     def test_div_int_2addr_by_zero_raises(self) -> None:
         state = _state(9, 0)
-        with pytest.raises(DexTraceVMError):
+        with pytest.raises(_ThrowSignal):
             arithmetic.handle_div_int_2addr(_insn(["v0", "v1"]), state)
 
     def test_rem_int_2addr(self) -> None:
@@ -145,21 +146,21 @@ class TestArithmetic2addrAndLit:
 
     def test_rem_int_lit8_by_zero_raises(self) -> None:
         state = _state(0, 5)
-        with pytest.raises(DexTraceVMError):
+        with pytest.raises(_ThrowSignal):
             arithmetic.handle_rem_int_lit8(
                 _insn(["v0", "v1"], param="0"), state
             )
 
     def test_rem_int_lit16_by_zero_raises(self) -> None:
         state = _state(0, 5)
-        with pytest.raises(DexTraceVMError):
+        with pytest.raises(_ThrowSignal):
             arithmetic.handle_rem_int_lit16(
                 _insn(["v0", "v1"], param="0"), state
             )
 
     def test_rem_int_2addr_by_zero_raises(self) -> None:
         state = _state(5, 0)
-        with pytest.raises(DexTraceVMError):
+        with pytest.raises(_ThrowSignal):
             arithmetic.handle_rem_int_2addr(_insn(["v0", "v1"]), state)
 
     def test_and_int_2addr(self) -> None:

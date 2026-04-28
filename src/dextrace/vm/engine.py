@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from dextrace.core.dex_parser import DexParser
+from dextrace.core.dex_parser import DexParser, TryItem
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.dalvik.disassembler import DalvikDisassembler, MethodDisasm
 from dextrace.dalvik.types import DecodedInsn
@@ -47,6 +47,7 @@ from dextrace.vm.errors import DexTraceVMError, DexTraceNotImplementedError
 from dextrace.vm.heap import ObjectHeap
 from dextrace.vm.int_ops import reg_index
 from dextrace.vm.register_file import RegisterFile
+from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.state import VMState
 
 import dextrace.vm.handlers.arithmetic as _arith
@@ -55,6 +56,7 @@ import dextrace.vm.handlers.branch as _branch
 import dextrace.vm.handlers.compare as _compare
 import dextrace.vm.handlers.field as _field
 import dextrace.vm.handlers.move as _move
+import dextrace.vm.handlers.throw as _throw
 import dextrace.vm.handlers.type_conv as _type_conv
 
 # ---------------------------------------------------------------------------
@@ -116,11 +118,16 @@ class DalvikVM:
         strict_stubs: bool = False,
     ) -> None:
         self._parser = DexParser(dex_bytes)
+        self._resolver = resolver
         self._disasm = DalvikDisassembler(dex_bytes, resolver)
         self._sig_to_codeoff = sig_to_codeoff
 
         # instruction cache: code_off -> List[DecodedInsn]
         self._insn_cache: Dict[int, List[DecodedInsn]] = {}
+
+        # P5a: parsed try/catch table cache, populated on first throw inside
+        # a method. Keyed by code_off, sibling of _insn_cache.
+        self._handler_cache: Dict[int, List[TryItem]] = {}
 
         # Optional verbose trace sink: called with human-readable [INFO] messages
         self._trace_sink = trace_sink
@@ -167,6 +174,9 @@ class DalvikVM:
                 _sink_ref(f"new-instance: {class_desc} → handle #{handle}")
 
         self._eval["new-instance"] = _handle_new_instance
+
+        # P5a: throw needs the heap to resolve the exception class descriptor.
+        _throw.register(self._eval, self._heap)
 
         self._final_state: Optional[VMState] = None
 
@@ -265,30 +275,32 @@ class DalvikVM:
             next_pc = insn.uoff + insn.size_units
             mnemonic = insn.mnemonic
 
-            # ---- invoke-* handled inline (OV-1) -------------------------
-            if mnemonic.startswith("invoke-"):
-                callee_code_off = self._do_invoke(
-                    insn, state, caller_code_off=code_off
-                )
-                if callee_code_off is not None:
-                    # Entered callee: switch instruction context
-                    code_off = callee_code_off
-                    insns = self._get_insns(code_off)
-                    uoff_to_idx = {ins.uoff: i for i, ins in enumerate(insns)}
-                    # state.pc was set to 0 inside _do_invoke
-                else:
-                    # External method stub: advance past invoke
-                    state.pc = next_pc
-                continue
-
-            # ---- dispatch via eval table --------------------------------
-            handler = self._eval.get(mnemonic)
-            if handler is None:
-                raise DexTraceNotImplementedError(
-                    f"unimplemented opcode: {mnemonic!r} (pc={insn.uoff:#06x})"
-                )
-
             try:
+                # ---- invoke-* handled inline (OV-1) ----------------------
+                if mnemonic.startswith("invoke-"):
+                    callee_code_off = self._do_invoke(
+                        insn, state, caller_code_off=code_off
+                    )
+                    if callee_code_off is not None:
+                        # Entered callee: switch instruction context
+                        code_off = callee_code_off
+                        insns = self._get_insns(code_off)
+                        uoff_to_idx = {
+                            ins.uoff: i for i, ins in enumerate(insns)
+                        }
+                        # state.pc was set to 0 inside _do_invoke
+                    else:
+                        # External method stub: advance past invoke
+                        state.pc = next_pc
+                    continue
+
+                # ---- dispatch via eval table -----------------------------
+                handler = self._eval.get(mnemonic)
+                if handler is None:
+                    raise DexTraceNotImplementedError(
+                        f"unimplemented opcode: {mnemonic!r} (pc={insn.uoff:#06x})"
+                    )
+
                 handler(insn, state)
             except _ReturnSignal as ret:
                 if not state.call_stack:
@@ -308,6 +320,45 @@ class DalvikVM:
                 # Make return value available to move-result* (OV-3)
                 state.pending_result = ret.value
                 state.pending_result_is_wide = ret.is_wide
+                continue
+            except _ThrowSignal as sig:
+                # P5a: walk catch tables in current frame; on miss pop frames
+                # one at a time until either a matching handler is found or
+                # the call stack is empty (uncaught -> top-level error).
+                throw_pc = insn.uoff  # site of the instruction that threw
+                while True:
+                    matched = self._find_handler(code_off, throw_pc, sig.class_desc)
+                    if matched is not None:
+                        # Hand off to the catch handler. Lazy-allocate a heap
+                        # object if the throw didn't carry one (e.g. div-by-zero
+                        # raised by a future P5b handler).
+                        handle = sig.exc_handle
+                        if handle == 0:
+                            handle = self._heap.allocate(sig.class_desc)
+                        state.pending_exception = handle
+                        # Guardrail: clear stale return value so the catch
+                        # block's first move-result-* (if any) can't pick up
+                        # a leftover value from the throwing call.
+                        state.pending_result = None
+                        state.pending_result_is_wide = False
+                        state.pc = matched.handler_addr
+                        break
+
+                    # No handler in this frame: pop one and retry.
+                    if not state.call_stack:
+                        raise DexTraceVMError(
+                            f"uncaught: {sig.class_desc}"
+                        ) from sig
+                    frame = state.call_stack.pop()
+                    state.registers = frame.caller_registers
+                    # Throw site in the caller is the invoke instruction itself.
+                    throw_pc = frame.invoke_pc
+                    code_off = frame.caller_code_off
+                    insns = self._get_insns(code_off)
+                    uoff_to_idx = {ins.uoff: i for i, ins in enumerate(insns)}
+                    # Stale-result guardrail also applies on cross-frame unwind.
+                    state.pending_result = None
+                    state.pending_result_is_wide = False
                 continue
 
             # Branch handlers write a new state.pc if taken, leave it at
@@ -426,6 +477,7 @@ class DalvikVM:
             method_desc=callee_sig,
             caller_registers=state.registers.snapshot(),
             caller_code_off=caller_code_off,
+            invoke_pc=insn.uoff,  # P5a: catch-walk needs caller's call site
         )
         state.call_stack.append(frame)
 
@@ -452,7 +504,12 @@ class DalvikVM:
         ]
         try:
             result = stub(stub_args, self._heap, self._api_calls)
-        except (DexTraceVMError, DexTraceNotImplementedError):
+        except (DexTraceVMError, DexTraceNotImplementedError, _ThrowSignal):
+            # P5a: stubs can model Java-level failures (e.g. URL.openConnection
+            # raising IOException) by raising _ThrowSignal directly. Without
+            # listing it here, the broad `except Exception` below would wrap
+            # the signal in a DexTraceVMError("stub failed ...") and the
+            # in-method catch block would never see it.
             raise
         except Exception as exc:  # pylint: disable=broad-exception-caught
             raise DexTraceVMError(
@@ -508,3 +565,44 @@ class DalvikVM:
             md: MethodDisasm = self._disasm.disassemble_method(code_off)
             self._insn_cache[code_off] = md.instructions
         return self._insn_cache[code_off]
+
+    # ------------------------------------------------------------------
+    # P5a: try/catch table cache + handler lookup
+    # ------------------------------------------------------------------
+
+    def _get_tries(self, code_off: int) -> List[TryItem]:
+        """Lazy-populated parsed try/catch table for `code_off`."""
+        cached = self._handler_cache.get(code_off)
+        if cached is not None:
+            return cached
+        tries = self._parser.parse_tries(code_off, self._resolver)
+        self._handler_cache[code_off] = tries
+        return tries
+
+    def _find_handler(
+        self, code_off: int, throw_pc: int, exc_class: str
+    ):  # -> Optional[CatchHandler]
+        """
+        Return the first CatchHandler in `code_off` whose try block covers
+        `throw_pc` AND whose class matches `exc_class` (subtype-aware), or
+        None if none match. Catch entries are evaluated in source order;
+        a catch-all (class_desc=None) matches any exception type.
+
+        The Dalvik spec says the FIRST matching handler in the FIRST covering
+        try block wins; later try blocks are not consulted even if they also
+        cover the throw site. We follow that ordering.
+        """
+        tries = self._get_tries(code_off)
+        for tr in tries:
+            if not (tr.start_addr <= throw_pc < tr.end_addr):
+                continue
+            for h in tr.handlers:
+                if h.class_desc is None:
+                    return h
+                if self._hierarchy.is_subtype(exc_class, h.class_desc):
+                    return h
+            # First covering try block wins — even if no entry matched,
+            # don't fall through to a later try block. This is the standard
+            # Dalvik handler-lookup rule.
+            return None
+        return None

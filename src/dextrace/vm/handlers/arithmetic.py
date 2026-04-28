@@ -16,7 +16,14 @@ from __future__ import annotations
 from dextrace.dalvik.types import DecodedInsn
 from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.int_ops import i32, u32, reg_index
+from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.state import VMState
+
+# P5a: integer div/rem by zero must surface as a Java-faithful
+# ArithmeticException so user-code `try/catch (ArithmeticException)` blocks
+# fire correctly. Raise via _ThrowSignal so the engine walks the catch table
+# instead of producing a top-level VM error.
+_ARITHMETIC_EXC = "Ljava/lang/ArithmeticException;"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -132,28 +139,28 @@ def handle_mul_int_lit16(insn: DecodedInsn, state: VMState) -> None:
 def handle_div_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     if b == 0:
-        raise DexTraceVMError(f"div-int by zero (pc={insn.uoff:#06x})")
+        raise _ThrowSignal(_ARITHMETIC_EXC)
     state.registers.set(dest, i32(int(a / b)))  # truncate toward zero
 
 
 def handle_div_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     if b == 0:
-        raise DexTraceVMError(f"div-int by zero (pc={insn.uoff:#06x})")
+        raise _ThrowSignal(_ARITHMETIC_EXC)
     state.registers.set(dest, i32(int(a / b)))
 
 
 def handle_div_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
     if lit == 0:
-        raise DexTraceVMError(f"div-int by zero (pc={insn.uoff:#06x})")
+        raise _ThrowSignal(_ARITHMETIC_EXC)
     state.registers.set(dest, i32(int(a / lit)))
 
 
 def handle_div_int_lit16(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
     if lit == 0:
-        raise DexTraceVMError(f"div-int by zero (pc={insn.uoff:#06x})")
+        raise _ThrowSignal(_ARITHMETIC_EXC)
     state.registers.set(dest, i32(int(a / lit)))
 
 
@@ -165,7 +172,7 @@ def handle_div_int_lit16(insn: DecodedInsn, state: VMState) -> None:
 def handle_rem_int(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get3(insn, state)
     if b == 0:
-        raise DexTraceVMError(f"rem-int by zero (pc={insn.uoff:#06x})")
+        raise _ThrowSignal(_ARITHMETIC_EXC)
     # Dalvik: truncate-toward-zero remainder (same as Java %)
     state.registers.set(dest, i32(int(a - b * int(a / b))))
 
@@ -173,21 +180,21 @@ def handle_rem_int(insn: DecodedInsn, state: VMState) -> None:
 def handle_rem_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
     if b == 0:
-        raise DexTraceVMError(f"rem-int by zero (pc={insn.uoff:#06x})")
+        raise _ThrowSignal(_ARITHMETIC_EXC)
     state.registers.set(dest, i32(int(a - b * int(a / b))))
 
 
 def handle_rem_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
     if lit == 0:
-        raise DexTraceVMError(f"rem-int by zero (pc={insn.uoff:#06x})")
+        raise _ThrowSignal(_ARITHMETIC_EXC)
     state.registers.set(dest, i32(int(a - lit * int(a / lit))))
 
 
 def handle_rem_int_lit16(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
     if lit == 0:
-        raise DexTraceVMError(f"rem-int by zero (pc={insn.uoff:#06x})")
+        raise _ThrowSignal(_ARITHMETIC_EXC)
     state.registers.set(dest, i32(int(a - lit * int(a / lit))))
 
 
