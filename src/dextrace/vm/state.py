@@ -30,3 +30,8 @@ class VMState:
     call_stack: List[CallFrame] = field(default_factory=list)
     pending_result: Optional[Union[int, str]] = None
     pending_result_is_wide: bool = False
+    # P5a: heap handle of an exception object whose catch handler is about to
+    # run; consumed by `move-exception`. Set by the engine when a _ThrowSignal
+    # matches a catch entry; cleared by move-exception (and by the engine on
+    # frame unwind to prevent stale values leaking across catches).
+    pending_exception: Optional[int] = None

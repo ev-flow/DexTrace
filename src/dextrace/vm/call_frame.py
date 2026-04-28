@@ -22,3 +22,8 @@ class CallFrame:
     method_desc: str
     caller_registers: RegisterFile  # always a snapshot
     caller_code_off: int  # engine uses this to restore insn lookup
+    # PC of the invoke that pushed this frame. Used by P5a's _ThrowSignal
+    # unwinder to ask "is the call site of this frame inside any try block?"
+    # without re-decoding the previous instruction. Defaults to 0 so older
+    # callers (tests that hand-build frames) don't have to update.
+    invoke_pc: int = 0

@@ -16,6 +16,13 @@ Algorithm:
 
 External superclasses (e.g. Ljava/lang/Object; not defined in this DEX) get an
 empty vtable, which is correct — they have no Dalvik implementation to dispatch to.
+
+P5a addition: `is_subtype(child, parent)` walks `_superclass`. To make catch-table
+walks correct for the Java built-in exception chain (which is never in the DEX),
+the constructor seeds `_superclass` with a small, fixed Java built-in hierarchy
+covering Throwable / Exception / RuntimeException + common subclasses. Real DEX
+classes can override these (e.g. a custom `Lcom/foo/MyException;` with its own
+superclass) by being processed after the seed during `_build`.
 """
 
 from __future__ import annotations
@@ -33,6 +40,34 @@ from dextrace.vm.errors import DexTraceNotImplementedError, DexTraceVMError
 _VTable = Dict[Tuple[str, str], int]
 
 
+# Java built-in exception/throwable hierarchy. Seeded into _superclass before
+# DEX classes so catch-walk can resolve external types like ArithmeticException
+# up to Throwable. DEX classes processed afterwards can shadow any of these.
+_JAVA_BUILTIN_SUPERCLASS: Dict[str, Optional[str]] = {
+    "Ljava/lang/Object;": None,
+    "Ljava/lang/Throwable;": "Ljava/lang/Object;",
+    "Ljava/lang/Error;": "Ljava/lang/Throwable;",
+    "Ljava/lang/Exception;": "Ljava/lang/Throwable;",
+    "Ljava/lang/RuntimeException;": "Ljava/lang/Exception;",
+    "Ljava/lang/NullPointerException;": "Ljava/lang/RuntimeException;",
+    "Ljava/lang/ArithmeticException;": "Ljava/lang/RuntimeException;",
+    "Ljava/lang/ClassCastException;": "Ljava/lang/RuntimeException;",
+    "Ljava/lang/IndexOutOfBoundsException;": "Ljava/lang/RuntimeException;",
+    "Ljava/lang/ArrayIndexOutOfBoundsException;": "Ljava/lang/IndexOutOfBoundsException;",
+    "Ljava/lang/StringIndexOutOfBoundsException;": "Ljava/lang/IndexOutOfBoundsException;",
+    "Ljava/lang/NegativeArraySizeException;": "Ljava/lang/RuntimeException;",
+    "Ljava/lang/IllegalArgumentException;": "Ljava/lang/RuntimeException;",
+    "Ljava/lang/IllegalStateException;": "Ljava/lang/RuntimeException;",
+    "Ljava/lang/NumberFormatException;": "Ljava/lang/IllegalArgumentException;",
+    "Ljava/lang/UnsupportedOperationException;": "Ljava/lang/RuntimeException;",
+    "Ljava/lang/SecurityException;": "Ljava/lang/RuntimeException;",
+    "Ljava/lang/InterruptedException;": "Ljava/lang/Exception;",
+    "Ljava/io/IOException;": "Ljava/lang/Exception;",
+    "Ljava/io/FileNotFoundException;": "Ljava/io/IOException;",
+    "Ljava/io/InterruptedIOException;": "Ljava/io/IOException;",
+}
+
+
 class ClassHierarchy:
     """
     Vtable table for all classes in a DEX.
@@ -43,13 +78,38 @@ class ClassHierarchy:
     def __init__(self, dex_bytes: bytes, resolver) -> None:
         # class_desc → vtable
         self._vtables: Dict[str, _VTable] = {}
-        # class_desc → superclass_desc (None for Object / no superclass in DEX)
-        self._superclass: Dict[str, Optional[str]] = {}
+        # class_desc → superclass_desc (None for Object / no superclass in DEX).
+        # Seeded with the Java built-in chain so catch-walks can resolve external
+        # exception types. DEX classes processed in _build override any overlap.
+        self._superclass: Dict[str, Optional[str]] = dict(_JAVA_BUILTIN_SUPERCLASS)
         self._build(dex_bytes, resolver)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def is_subtype(self, child: str, parent: str) -> bool:
+        """
+        Return True if `child` is `parent` or a subtype of `parent`.
+
+        Walks `_superclass` (DEX-derived + Java built-in seed). If `child` is
+        unknown to the hierarchy, only an exact match returns True. Loop-safe
+        against malformed cyclic chains (16-step depth bound).
+        """
+        if child == parent:
+            return True
+        seen: Set[str] = set()
+        cur: Optional[str] = self._superclass.get(child)
+        depth = 0
+        while cur is not None:
+            if cur == parent:
+                return True
+            if cur in seen or depth > 16:
+                return False
+            seen.add(cur)
+            cur = self._superclass.get(cur)
+            depth += 1
+        return False
 
     def has_class(self, class_desc: str) -> bool:
         """
