@@ -79,14 +79,8 @@ def handle_const_wide_high16(insn: DecodedInsn, state: VMState) -> None:
     state.registers.set_wide(dest, int(insn.param) << 48)
 
 
-def handle_const_string(insn: DecodedInsn, state: VMState) -> None:
-    # const-string vAA, string@BBBB
-    dest = reg_index(insn.regs[0])
-    # param is the resolved string with surrounding quotes e.g. '"hello"'
-    raw = insn.param or ""
-    if raw.startswith('"') and raw.endswith('"'):
-        raw = raw[1:-1]
-    state.registers.set(dest, hash(raw) & 0xFFFF_FFFF)
+# const-string and const-string/jumbo are heap-allocating opcodes (P5d) and
+# live in engine.py as closures so they can capture the heap reference.
 
 
 # ---------------------------------------------------------------------------
@@ -216,8 +210,8 @@ def register(eval_table: dict) -> None:
     eval_table["const-wide/32"] = handle_const_wide32
     eval_table["const-wide"] = handle_const_wide
     eval_table["const-wide/high16"] = handle_const_wide_high16
-    eval_table["const-string"] = handle_const_string
-    eval_table["const-string/jumbo"] = handle_const_string
+    # const-string / const-string/jumbo / const-class are registered by the
+    # engine — they need the heap.
     eval_table["move"] = handle_move
     eval_table["move/from16"] = handle_move_from16
     eval_table["move/16"] = handle_move_16
