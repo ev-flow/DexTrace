@@ -13,9 +13,22 @@ Shift contracts (from int_ops.py):
 
 from __future__ import annotations
 
+import math
+import operator
+
 from dextrace.dalvik.types import DecodedInsn
 from dextrace.vm.errors import DexTraceVMError
-from dextrace.vm.int_ops import i32, u32, reg_index
+from dextrace.vm.int_ops import (
+    bits_to_f32,
+    bits_to_f64,
+    f32_to_bits,
+    f64_to_bits,
+    i32,
+    i64,
+    reg_index,
+    u32,
+    u64,
+)
 from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.state import VMState
 
@@ -24,6 +37,42 @@ from dextrace.vm.state import VMState
 # fire correctly. Raise via _ThrowSignal so the engine walks the catch table
 # instead of producing a top-level VM error.
 _ARITHMETIC_EXC = "Ljava/lang/ArithmeticException;"
+
+
+# ---------------------------------------------------------------------------
+# Java-faithful long div/rem (truncate-toward-zero, NOT Python's floor //).
+# Required because `int(a / b)` loses precision for 64-bit values that overflow
+# the 53-bit float mantissa.
+# ---------------------------------------------------------------------------
+
+
+def _trunc_div_long(a: int, b: int) -> int:
+    sign = -1 if (a < 0) ^ (b < 0) else 1
+    return sign * (abs(a) // abs(b))
+
+
+def _trunc_rem_long(a: int, b: int) -> int:
+    return a - b * _trunc_div_long(a, b)
+
+
+# ---------------------------------------------------------------------------
+# IEEE-754 division / remainder. Java/Dalvik float div by zero returns
+# Inf/NaN, never throws — Python raises ZeroDivisionError, so we shim.
+# ---------------------------------------------------------------------------
+
+
+def _ieee_div(a: float, b: float) -> float:
+    if b == 0.0:
+        if a == 0.0:
+            return float("nan")
+        return math.copysign(float("inf"), a) * math.copysign(1.0, b)
+    return a / b
+
+
+def _ieee_rem(a: float, b: float) -> float:
+    if b == 0.0 or math.isinf(a):
+        return float("nan")
+    return math.fmod(a, b)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -332,6 +381,168 @@ def handle_not_int(insn: DecodedInsn, state: VMState) -> None:
     state.registers.set(dest, i32(~state.registers.get(src)))
 
 
+# ===========================================================================
+# P5b: Wide arithmetic (long / float / double)
+# ===========================================================================
+#
+# Long values occupy a vN:vN+1 register pair via get_wide / set_wide.
+# Float values occupy a single register holding the IEEE 754 single-precision
+# bit pattern. Double values occupy a register pair holding the double-precision
+# bit pattern. Conversion to/from Python floats happens at handler boundaries
+# via int_ops.f32_to_bits / bits_to_f32 / f64_to_bits / bits_to_f64.
+# ---------------------------------------------------------------------------
+
+
+# --- long binary helpers -----------------------------------------------------
+
+
+def _long2(insn: DecodedInsn, state: VMState, op) -> None:
+    dest = reg_index(insn.regs[0])
+    a = i64(state.registers.get_wide(reg_index(insn.regs[1])))
+    b = i64(state.registers.get_wide(reg_index(insn.regs[2])))
+    state.registers.set_wide(dest, i64(op(a, b)))
+
+
+def _long2addr(insn: DecodedInsn, state: VMState, op) -> None:
+    dest = reg_index(insn.regs[0])
+    a = i64(state.registers.get_wide(dest))
+    b = i64(state.registers.get_wide(reg_index(insn.regs[1])))
+    state.registers.set_wide(dest, i64(op(a, b)))
+
+
+# --- long div/rem (Java truncate-toward-zero, raise on b==0) ----------------
+
+
+def _long_div(insn: DecodedInsn, state: VMState) -> None:
+    dest = reg_index(insn.regs[0])
+    a = i64(state.registers.get_wide(reg_index(insn.regs[1])))
+    b = i64(state.registers.get_wide(reg_index(insn.regs[2])))
+    if b == 0:
+        raise _ThrowSignal(_ARITHMETIC_EXC)
+    state.registers.set_wide(dest, i64(_trunc_div_long(a, b)))
+
+
+def _long_div_2addr(insn: DecodedInsn, state: VMState) -> None:
+    dest = reg_index(insn.regs[0])
+    a = i64(state.registers.get_wide(dest))
+    b = i64(state.registers.get_wide(reg_index(insn.regs[1])))
+    if b == 0:
+        raise _ThrowSignal(_ARITHMETIC_EXC)
+    state.registers.set_wide(dest, i64(_trunc_div_long(a, b)))
+
+
+def _long_rem(insn: DecodedInsn, state: VMState) -> None:
+    dest = reg_index(insn.regs[0])
+    a = i64(state.registers.get_wide(reg_index(insn.regs[1])))
+    b = i64(state.registers.get_wide(reg_index(insn.regs[2])))
+    if b == 0:
+        raise _ThrowSignal(_ARITHMETIC_EXC)
+    state.registers.set_wide(dest, i64(_trunc_rem_long(a, b)))
+
+
+def _long_rem_2addr(insn: DecodedInsn, state: VMState) -> None:
+    dest = reg_index(insn.regs[0])
+    a = i64(state.registers.get_wide(dest))
+    b = i64(state.registers.get_wide(reg_index(insn.regs[1])))
+    if b == 0:
+        raise _ThrowSignal(_ARITHMETIC_EXC)
+    state.registers.set_wide(dest, i64(_trunc_rem_long(a, b)))
+
+
+# --- long shifts (count is a single int reg, low 6 bits) --------------------
+
+
+def _long_shift(insn: DecodedInsn, state: VMState, op) -> None:
+    dest = reg_index(insn.regs[0])
+    val = state.registers.get_wide(reg_index(insn.regs[1]))
+    cnt = state.registers.get(reg_index(insn.regs[2])) & 0x3F
+    state.registers.set_wide(dest, op(val, cnt))
+
+
+def _long_shift_2addr(insn: DecodedInsn, state: VMState, op) -> None:
+    dest = reg_index(insn.regs[0])
+    val = state.registers.get_wide(dest)
+    cnt = state.registers.get(reg_index(insn.regs[1])) & 0x3F
+    state.registers.set_wide(dest, op(val, cnt))
+
+
+def _shl_long_op(val: int, cnt: int) -> int:
+    return i64(u64(val) << cnt)
+
+
+def _shr_long_op(val: int, cnt: int) -> int:
+    return i64(i64(val) >> cnt)
+
+
+def _ushr_long_op(val: int, cnt: int) -> int:
+    return u64(val) >> cnt
+
+
+# --- long unary -------------------------------------------------------------
+
+
+def handle_neg_long(insn: DecodedInsn, state: VMState) -> None:
+    dest = reg_index(insn.regs[0])
+    src = reg_index(insn.regs[1])
+    state.registers.set_wide(dest, i64(-i64(state.registers.get_wide(src))))
+
+
+def handle_not_long(insn: DecodedInsn, state: VMState) -> None:
+    dest = reg_index(insn.regs[0])
+    src = reg_index(insn.regs[1])
+    state.registers.set_wide(dest, i64(~i64(state.registers.get_wide(src))))
+
+
+# --- float binary -----------------------------------------------------------
+
+
+def _float2(insn: DecodedInsn, state: VMState, op) -> None:
+    dest = reg_index(insn.regs[0])
+    a = bits_to_f32(state.registers.get(reg_index(insn.regs[1])))
+    b = bits_to_f32(state.registers.get(reg_index(insn.regs[2])))
+    state.registers.set(dest, f32_to_bits(op(a, b)))
+
+
+def _float2addr(insn: DecodedInsn, state: VMState, op) -> None:
+    dest = reg_index(insn.regs[0])
+    a = bits_to_f32(state.registers.get(dest))
+    b = bits_to_f32(state.registers.get(reg_index(insn.regs[1])))
+    state.registers.set(dest, f32_to_bits(op(a, b)))
+
+
+def handle_neg_float(insn: DecodedInsn, state: VMState) -> None:
+    dest = reg_index(insn.regs[0])
+    src = reg_index(insn.regs[1])
+    state.registers.set(
+        dest, f32_to_bits(-bits_to_f32(state.registers.get(src)))
+    )
+
+
+# --- double binary ----------------------------------------------------------
+
+
+def _double2(insn: DecodedInsn, state: VMState, op) -> None:
+    dest = reg_index(insn.regs[0])
+    a = bits_to_f64(state.registers.get_wide(reg_index(insn.regs[1])))
+    b = bits_to_f64(state.registers.get_wide(reg_index(insn.regs[2])))
+    state.registers.set_wide(dest, f64_to_bits(op(a, b)))
+
+
+def _double2addr(insn: DecodedInsn, state: VMState, op) -> None:
+    dest = reg_index(insn.regs[0])
+    a = bits_to_f64(state.registers.get_wide(dest))
+    b = bits_to_f64(state.registers.get_wide(reg_index(insn.regs[1])))
+    state.registers.set_wide(dest, f64_to_bits(op(a, b)))
+
+
+def handle_neg_double(insn: DecodedInsn, state: VMState) -> None:
+    dest = reg_index(insn.regs[0])
+    src = reg_index(insn.regs[1])
+    state.registers.set_wide(
+        dest, f64_to_bits(-bits_to_f64(state.registers.get_wide(src)))
+    )
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -385,3 +596,71 @@ def register(eval_table: dict) -> None:
     ]
     for name, fn in pairs:
         eval_table[name] = fn
+
+    # ---- P5b: long binary (closures over op functions) --------------------
+    long_binary = [
+        ("add-long", operator.add),
+        ("sub-long", operator.sub),
+        ("mul-long", operator.mul),
+        ("and-long", operator.and_),
+        ("or-long", operator.or_),
+        ("xor-long", operator.xor),
+    ]
+    for name, op in long_binary:
+        eval_table[name] = (lambda i, s, _op=op: _long2(i, s, _op))
+        eval_table[name + "/2addr"] = (
+            lambda i, s, _op=op: _long2addr(i, s, _op)
+        )
+
+    # div-long / rem-long: zero-check, Java truncate-toward-zero
+    eval_table["div-long"] = _long_div
+    eval_table["div-long/2addr"] = _long_div_2addr
+    eval_table["rem-long"] = _long_rem
+    eval_table["rem-long/2addr"] = _long_rem_2addr
+
+    # long shifts (count is single int reg, low 6 bits)
+    long_shifts = [
+        ("shl-long", _shl_long_op),
+        ("shr-long", _shr_long_op),
+        ("ushr-long", _ushr_long_op),
+    ]
+    for name, op in long_shifts:
+        eval_table[name] = (lambda i, s, _op=op: _long_shift(i, s, _op))
+        eval_table[name + "/2addr"] = (
+            lambda i, s, _op=op: _long_shift_2addr(i, s, _op)
+        )
+
+    # long unary
+    eval_table["neg-long"] = handle_neg_long
+    eval_table["not-long"] = handle_not_long
+
+    # ---- P5b: float binary -------------------------------------------------
+    # Float div/rem do NOT raise — IEEE 754 returns Inf/NaN.
+    float_binary = [
+        ("add-float", operator.add),
+        ("sub-float", operator.sub),
+        ("mul-float", operator.mul),
+        ("div-float", _ieee_div),
+        ("rem-float", _ieee_rem),
+    ]
+    for name, op in float_binary:
+        eval_table[name] = (lambda i, s, _op=op: _float2(i, s, _op))
+        eval_table[name + "/2addr"] = (
+            lambda i, s, _op=op: _float2addr(i, s, _op)
+        )
+    eval_table["neg-float"] = handle_neg_float
+
+    # ---- P5b: double binary ------------------------------------------------
+    double_binary = [
+        ("add-double", operator.add),
+        ("sub-double", operator.sub),
+        ("mul-double", operator.mul),
+        ("div-double", _ieee_div),
+        ("rem-double", _ieee_rem),
+    ]
+    for name, op in double_binary:
+        eval_table[name] = (lambda i, s, _op=op: _double2(i, s, _op))
+        eval_table[name + "/2addr"] = (
+            lambda i, s, _op=op: _double2addr(i, s, _op)
+        )
+    eval_table["neg-double"] = handle_neg_double
