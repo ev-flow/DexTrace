@@ -17,7 +17,6 @@ Covers:
 from __future__ import annotations
 
 from dextrace.dalvik.types import DecodedInsn
-from dextrace.vm.errors import DexTraceNotImplementedError
 from dextrace.vm.int_ops import reg_index
 from dextrace.vm.state import VMState
 
@@ -127,25 +126,11 @@ def handle_goto_32(insn: DecodedInsn, state: VMState) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Switch — not required for P1/P2; raise to signal missing feature
-# ---------------------------------------------------------------------------
-
-
-def handle_packed_switch(insn: DecodedInsn, state: VMState) -> None:
-    raise DexTraceNotImplementedError(
-        f"packed-switch not implemented (pc={insn.uoff:#06x})"
-    )
-
-
-def handle_sparse_switch(insn: DecodedInsn, state: VMState) -> None:
-    raise DexTraceNotImplementedError(
-        f"sparse-switch not implemented (pc={insn.uoff:#06x})"
-    )
-
-
-# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
+# packed-switch / sparse-switch are not registered here. The engine handles
+# them inline so it can reach the current frame's raw insn bytes (needed to
+# decode the payload table) without leaking the parser into eval handlers.
 
 
 def register(eval_table: dict) -> None:
@@ -165,8 +150,6 @@ def register(eval_table: dict) -> None:
         ("goto", handle_goto),
         ("goto/16", handle_goto_16),
         ("goto/32", handle_goto_32),
-        ("packed-switch", handle_packed_switch),
-        ("sparse-switch", handle_sparse_switch),
     ]
     for name, fn in pairs:
         eval_table[name] = fn
