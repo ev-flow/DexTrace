@@ -41,48 +41,10 @@ stubs for the device-id reads.
 
 ## Cut from Phase 5 design
 
-### P5.1 — try/catch dispatch
-P4 deliberately runs only the linear no-throw happy path. Ahmyth's
-`sendSMS` has a `try { ... } catch (Exception)` that the interpreter
-ignores because no in-method `throw` ever fires. Real coverage requires:
-- Reading `code_item.tries` + `handlers` from the parser (already parsed,
-  not yet consumed by the engine)
-- A per-frame exception-handler stack
-- `_ReturnSignal`-style `_ThrowSignal` that walks handlers
-- `move-exception` opcode handler (currently unimplemented — would raise
-  `unimplemented opcode` if the interpreter ever reached it)
-
-**Why deferred**: stub-first design means we don't synthesize exceptions
-(stubs return success values), so the catch path is dead code in P4.
-First time we actually throw will be from a stub that models a failure
-case (e.g. `URL.openConnection` returning `IOException`).
-
-### P5.2 — const-string heap migration
-Currently `const-string` writes a placeholder int (the string-pool index)
-into the destination register. This works for code that immediately
-hands the string to a stub (the stub can call `resolver.get_string(idx)`)
-but breaks for code that stores the string and does pointer-equality or
-re-loads it later. Migration target:
-`const-string` → `heap.allocate("Ljava/lang/String;", value=<resolved str>)`
-and put the *handle* in the register. Then stubs read via `heap.get_value`.
-
-**Why deferred**: P4 sample's `const-string` constants
-(`"address"`, `"body"`, etc.) are only used in unreachable catch paths,
-so the placeholder-int hack still produces correct IoC capture for the
-happy path. First sample where it matters: anything in P4.1 scope that
-appends a literal to a StringBuilder.
-
-### P5.3 — `vm/trace.py` ExecutionTrace + `--coverage` parity
-P4 ships a flat `vm._api_calls: list[dict]` consumed by `--trace`. The
-plan has a richer `ExecutionTrace` with branch decisions, register
-reads/writes, and per-instruction timing. Build only when an analyst
-asks for replay-debugging or when coverage-compare lands.
-
-### P5.4 — `invoke-interface` + `invoke-polymorphic` + `invoke-custom`
-Currently raise `DexTraceNotImplementedError` with the offending sig.
-Phase 4's Ahmyth path doesn't hit any of these (sendSMS uses
-invoke-static + invoke-virtual/range only). `invoke-interface` is the
-first one likely to be needed (Cursor.moveToNext etc. when P4.1 lands).
+### P5.4 — `invoke-polymorphic` + `invoke-custom`
+Both still raise `DexTraceNotImplementedError`. They need bootstrap
+method machinery (method handles, invokedynamic-style call sites) which
+no current sample reaches. `invoke-interface` is done as of P5f.
 
 ### P5.5 — Coverage compare (`tests/coverage/compare.py`)
 Static method enumeration vs dynamic vm.run() reach. The plan says
@@ -102,7 +64,9 @@ contact-list query or a SharedPreferences read.
 ### P6.2 — `--explain` provenance
 For each captured stub call arg, walk back through the trace and surface
 "this string was built from `getDeviceId()` + `'?'` + `URL.encode(getLine1Number())`".
-Depends on P6.1 (taint propagation) and P5.3 (richer ExecutionTrace).
+Depends on P6.1 (taint propagation). The richer ExecutionTrace from P5.3
+(`vm/trace.py`) is in place and provides the per-instruction record
+provenance walking will read from.
 
 ---
 
