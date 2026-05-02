@@ -27,11 +27,17 @@ Execution loop invariant:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Union
+from time import perf_counter_ns
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from dextrace.core.dex_parser import DexParser, TryItem
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.dalvik.disassembler import DalvikDisassembler, MethodDisasm
+from dextrace.dalvik.payload import (
+    decode_fill_array_data,
+    decode_packed_switch,
+    decode_sparse_switch,
+)
 from dextrace.dalvik.types import DecodedInsn
 from dextrace.vm.android_stubs import (
     REGISTRY as DEFAULT_STUB_REGISTRY,
@@ -45,10 +51,11 @@ from dextrace.vm.call_frame import CallFrame
 from dextrace.vm.class_hierarchy import ClassHierarchy
 from dextrace.vm.errors import DexTraceVMError, DexTraceNotImplementedError
 from dextrace.vm.heap import ObjectHeap
-from dextrace.vm.int_ops import reg_index
+from dextrace.vm.int_ops import i32, i64, reg_index
 from dextrace.vm.register_file import RegisterFile
 from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.state import VMState
+from dextrace.vm.trace import ExecutionTrace, TraceStep
 
 import dextrace.vm.handlers.arithmetic as _arith
 import dextrace.vm.handlers.array as _array
@@ -57,6 +64,7 @@ import dextrace.vm.handlers.compare as _compare
 import dextrace.vm.handlers.field as _field
 import dextrace.vm.handlers.move as _move
 import dextrace.vm.handlers.throw as _throw
+import dextrace.vm.handlers.type_check as _type_check
 import dextrace.vm.handlers.type_conv as _type_conv
 
 # ---------------------------------------------------------------------------
@@ -91,7 +99,9 @@ def _handle_return(insn: DecodedInsn, state: VMState) -> None:
 
 
 def _handle_return_wide(insn: DecodedInsn, state: VMState) -> None:
-    val = state.registers.get_wide(reg_index(insn.regs[0]))
+    # P5b: sign-extend so the surfaced value reflects Java's signed long
+    # semantics. Without i64, a returned -1L would print as 2^64-1.
+    val = i64(state.registers.get_wide(reg_index(insn.regs[0])))
     raise _ReturnSignal(val, is_wide=True)
 
 
@@ -116,6 +126,7 @@ class DalvikVM:
         trace_sink: Optional[Callable[[str], None]] = None,
         stub_registry: Optional[Dict[str, StubCallable]] = None,
         strict_stubs: bool = False,
+        execution_trace: Optional[ExecutionTrace] = None,
     ) -> None:
         self._parser = DexParser(dex_bytes)
         self._resolver = resolver
@@ -132,6 +143,10 @@ class DalvikVM:
         # Optional verbose trace sink: called with human-readable [INFO] messages
         self._trace_sink = trace_sink
 
+        # P5.3: optional structured execution trace. When set, the main
+        # _execute loop records one TraceStep per instruction.
+        self._execution_trace = execution_trace
+
         # Object heap and class hierarchy for P3 dispatch
         self._heap = ObjectHeap()
         self._hierarchy = ClassHierarchy(dex_bytes, resolver)
@@ -147,6 +162,11 @@ class DalvikVM:
         # consecutive vm.run() calls observe isolated trace logs.
         self._api_calls: List[Dict[str, Any]] = []
 
+        # P5d: static-fields map keyed by full Dalvik field signature
+        # ("Lcls;->name:type"). Reset at run() entry (heap.reset path) so
+        # static state cannot bleed between method runs.
+        self._static_fields: Dict[str, Any] = {}
+
         # eval table (invoke-* and return-* NOT here)
         self._eval: Dict[str, Any] = {}
         _move.register(self._eval)
@@ -154,8 +174,8 @@ class DalvikVM:
         _branch.register(self._eval)
         _compare.register(self._eval)
         _type_conv.register(self._eval)
-        _field.register(self._eval)
-        _array.register(self._eval)
+        _field.register(self._eval, self._heap, self._static_fields)
+        _array.register(self._eval, self._heap)
 
         self._eval["return-void"] = _handle_return_void
         self._eval["return"] = _handle_return
@@ -175,8 +195,40 @@ class DalvikVM:
 
         self._eval["new-instance"] = _handle_new_instance
 
+        # P5d: const-string materializes the resolved string onto the heap
+        # so downstream code (iget/iput-object, stubs that read via
+        # heap.get_value) sees a proper Ljava/lang/String; handle instead of
+        # an integer hash. Disassembler delivers `param` already wrapped in
+        # double quotes — we strip them before allocation.
+        def _handle_const_string(insn: DecodedInsn, state: VMState) -> None:
+            raw = insn.param or ""
+            if len(raw) >= 2 and raw.startswith('"') and raw.endswith('"'):
+                raw = raw[1:-1]
+            handle = _heap_ref.allocate("Ljava/lang/String;", value=raw)
+            state.registers.set(reg_index(insn.regs[0]), handle)
+
+        self._eval["const-string"] = _handle_const_string
+        self._eval["const-string/jumbo"] = _handle_const_string
+
+        # P5d: const-class materializes a Class<?> object whose value is the
+        # underlying type descriptor. The minimal model is enough for code
+        # that uses `Foo.class` as a reflection key or compares class
+        # references for equality.
+        def _handle_const_class(insn: DecodedInsn, state: VMState) -> None:
+            type_desc = insn.param
+            handle = _heap_ref.allocate("Ljava/lang/Class;", value=type_desc)
+            state.registers.set(reg_index(insn.regs[0]), handle)
+
+        self._eval["const-class"] = _handle_const_class
+
         # P5a: throw needs the heap to resolve the exception class descriptor.
         _throw.register(self._eval, self._heap)
+
+        # P5c: check-cast / instance-of need heap + class hierarchy; monitor-*
+        # records lock activity through the trace_sink when one is provided.
+        _type_check.register(
+            self._eval, self._heap, self._hierarchy, self._trace_sink
+        )
 
         self._final_state: Optional[VMState] = None
 
@@ -201,6 +253,7 @@ class DalvikVM:
         """
         args = args or []
         self._heap.reset()  # isolate heap state between run() calls
+        self._static_fields.clear()  # P5d: same isolation for static fields
         self._api_calls.clear()
 
         code_off = self._sig_to_codeoff.get(entry_sig)
@@ -256,6 +309,8 @@ class DalvikVM:
             ins.uoff: i for i, ins in enumerate(insns)
         }
 
+        trace = self._execution_trace
+
         steps = 0
         while True:
             if steps >= self.MAX_STEPS:
@@ -275,6 +330,15 @@ class DalvikVM:
             next_pc = insn.uoff + insn.size_units
             mnemonic = insn.mnemonic
 
+            # P5.3: per-instruction snapshot for trace diff. Skipped entirely
+            # when no trace is attached so the hot path stays cheap.
+            if trace is not None:
+                pre_code_off = code_off
+                pre_regs: Tuple[int, ...] = tuple(
+                    state.registers.get(i) for i in range(len(state.registers))
+                )
+                t0 = perf_counter_ns()
+
             try:
                 # ---- invoke-* handled inline (OV-1) ----------------------
                 if mnemonic.startswith("invoke-"):
@@ -292,19 +356,40 @@ class DalvikVM:
                     else:
                         # External method stub: advance past invoke
                         state.pc = next_pc
+                    if trace is not None:
+                        self._record_trace(
+                            trace, pre_code_off, code_off, insn, mnemonic,
+                            next_pc, state, pre_regs, t0,
+                        )
                     continue
 
-                # ---- dispatch via eval table -----------------------------
-                handler = self._eval.get(mnemonic)
-                if handler is None:
-                    raise DexTraceNotImplementedError(
-                        f"unimplemented opcode: {mnemonic!r} (pc={insn.uoff:#06x})"
-                    )
+                # ---- packed/sparse switch handled inline ------------------
+                # Inline dispatch lets us reach the current frame's raw insn
+                # bytes (needed to decode the payload) without leaking the
+                # parser into eval-table handlers.
+                if mnemonic == "packed-switch":
+                    self._do_packed_switch(insn, state, code_off)
+                elif mnemonic == "sparse-switch":
+                    self._do_sparse_switch(insn, state, code_off)
+                elif mnemonic == "fill-array-data":
+                    self._do_fill_array_data(insn, state, code_off)
+                else:
+                    # ---- dispatch via eval table -------------------------
+                    handler = self._eval.get(mnemonic)
+                    if handler is None:
+                        raise DexTraceNotImplementedError(
+                            f"unimplemented opcode: {mnemonic!r} (pc={insn.uoff:#06x})"
+                        )
 
-                handler(insn, state)
+                    handler(insn, state)
             except _ReturnSignal as ret:
                 if not state.call_stack:
                     # Top-level return — execution complete
+                    if trace is not None:
+                        self._record_trace(
+                            trace, pre_code_off, code_off, insn, mnemonic,
+                            next_pc, state, pre_regs, t0,
+                        )
                     return ret.value
 
                 # Restore caller frame (OV-6)
@@ -320,6 +405,11 @@ class DalvikVM:
                 # Make return value available to move-result* (OV-3)
                 state.pending_result = ret.value
                 state.pending_result_is_wide = ret.is_wide
+                if trace is not None:
+                    self._record_trace(
+                        trace, pre_code_off, code_off, insn, mnemonic,
+                        next_pc, state, pre_regs, t0,
+                    )
                 continue
             except _ThrowSignal as sig:
                 # P5a: walk catch tables in current frame; on miss pop frames
@@ -359,6 +449,11 @@ class DalvikVM:
                     # Stale-result guardrail also applies on cross-frame unwind.
                     state.pending_result = None
                     state.pending_result_is_wide = False
+                if trace is not None:
+                    self._record_trace(
+                        trace, pre_code_off, code_off, insn, mnemonic,
+                        next_pc, state, pre_regs, t0,
+                    )
                 continue
 
             # Branch handlers write a new state.pc if taken, leave it at
@@ -367,6 +462,58 @@ class DalvikVM:
             if state.pc == insn.uoff:
                 state.pc = next_pc
             # else: branch was taken — use handler's target
+
+            if trace is not None:
+                self._record_trace(
+                    trace, pre_code_off, code_off, insn, mnemonic,
+                    next_pc, state, pre_regs, t0,
+                )
+
+    # ------------------------------------------------------------------
+    # P5.3: trace recording
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _record_trace(
+        trace: ExecutionTrace,
+        pre_code_off: int,
+        post_code_off: int,
+        insn: DecodedInsn,
+        mnemonic: str,
+        next_pc: int,
+        state: VMState,
+        pre_regs: Tuple[int, ...],
+        t0: int,
+    ) -> None:
+        duration = perf_counter_ns() - t0
+        frame_changed = post_code_off != pre_code_off
+        if frame_changed:
+            # Register file got swapped to a different frame; writes from
+            # the swap aren't local to the pre-step frame, so we skip the
+            # diff. Replay tools can reconstruct the new frame from the
+            # next step's pre-state if they need it.
+            writes: Tuple[Tuple[int, int], ...] = ()
+            taken = True
+        else:
+            post_regs = tuple(
+                state.registers.get(i) for i in range(len(state.registers))
+            )
+            writes = tuple(
+                (i, post_regs[i])
+                for i in range(min(len(pre_regs), len(post_regs)))
+                if pre_regs[i] != post_regs[i]
+            )
+            taken = state.pc != next_pc
+        trace.record(TraceStep(
+            code_off=pre_code_off,
+            uoff=insn.uoff,
+            mnemonic=mnemonic,
+            next_pc=state.pc,
+            branch_taken=taken,
+            register_writes=writes,
+            duration_ns=duration,
+            frame_changed=frame_changed,
+        ))
 
     # ------------------------------------------------------------------
     # Invoke helper
@@ -397,11 +544,6 @@ class DalvikVM:
                 f"{mnemonic} not implemented (pc={insn.uoff:#06x})"
             )
 
-        if mnemonic in ("invoke-interface", "invoke-interface/range"):
-            raise DexTraceNotImplementedError(
-                f"invoke-interface not implemented: {insn.param} (pc={insn.uoff:#06x})"
-            )
-
         callee_sig = insn.param
         if not callee_sig:
             raise DexTraceVMError(
@@ -416,12 +558,20 @@ class DalvikVM:
             self._invoke_stub(stub, callee_sig, insn, state)
             return None
 
-        if mnemonic in ("invoke-virtual", "invoke-virtual/range"):
+        # P5f: invoke-interface uses the same runtime-class vtable lookup as
+        # invoke-virtual. Java semantics require the runtime class implements
+        # the interface, so (name, proto) will be present in its vtable.
+        if mnemonic in (
+            "invoke-virtual",
+            "invoke-virtual/range",
+            "invoke-interface",
+            "invoke-interface/range",
+        ):
             # Vtable dispatch: resolve to runtime class's implementation.
             receiver_handle = state.registers.get(reg_index(insn.regs[0]))
             if receiver_handle == 0:
                 raise DexTraceVMError(
-                    f"null receiver: invoke-virtual at pc={insn.uoff:#06x}"
+                    f"null receiver: {mnemonic} at pc={insn.uoff:#06x}"
                 )
             runtime_desc = self._heap.get_class(receiver_handle)
 
@@ -443,7 +593,7 @@ class DalvikVM:
                 resolved_sig = f"{runtime_desc}->{vname}{vproto}"
                 if resolved_sig != callee_sig:
                     self._trace_sink(
-                        f"invoke-virtual: {callee_sig} → {resolved_sig}"
+                        f"{mnemonic}: {callee_sig} → {resolved_sig}"
                     )
         else:
             callee_code_off = self._sig_to_codeoff.get(callee_sig)
@@ -565,6 +715,71 @@ class DalvikVM:
             md: MethodDisasm = self._disasm.disassemble_method(code_off)
             self._insn_cache[code_off] = md.instructions
         return self._insn_cache[code_off]
+
+    # ------------------------------------------------------------------
+    # P5c: switch dispatch (inline so handlers can reach raw insn bytes)
+    # ------------------------------------------------------------------
+
+    def _do_packed_switch(
+        self, insn: DecodedInsn, state: VMState, code_off: int
+    ) -> None:
+        """
+        Decode the packed-switch payload at insn.target_uoff and branch the
+        dispatch loop. Falls through (no pc mutation) when the test value is
+        outside [first_key, first_key + size).
+        """
+        test_val = i32(state.registers.get(reg_index(insn.regs[0])))
+        insns_bytes = self._parser.parse_code_item(code_off).insns
+        table = decode_packed_switch(insns_bytes, insn.target_uoff)
+        size = len(table.targets)
+        if size == 0:
+            return
+        if table.first_key <= test_val < table.first_key + size:
+            rel = table.targets[test_val - table.first_key]
+            state.pc = insn.uoff + rel
+
+    def _do_sparse_switch(
+        self, insn: DecodedInsn, state: VMState, code_off: int
+    ) -> None:
+        """
+        Decode the sparse-switch payload at insn.target_uoff and branch on a
+        keys[] match. Linear scan is fine for the tables we see in the wild;
+        keys are guaranteed sorted ascending so we can early-exit.
+        """
+        test_val = i32(state.registers.get(reg_index(insn.regs[0])))
+        insns_bytes = self._parser.parse_code_item(code_off).insns
+        table = decode_sparse_switch(insns_bytes, insn.target_uoff)
+        for k, t in zip(table.keys, table.targets):
+            if k == test_val:
+                state.pc = insn.uoff + t
+                return
+            if k > test_val:
+                return
+
+    def _do_fill_array_data(
+        self, insn: DecodedInsn, state: VMState, code_off: int
+    ) -> None:
+        """
+        Decode the fill-array-data payload at insn.target_uoff and copy each
+        element into the heap-backed array referenced by the instruction's
+        register. Null array → NPE; payload longer than the array is a hard
+        format error (would be rejected by dexopt) so it raises VMError.
+        """
+        from dextrace.vm.signals import _ThrowSignal as _Throw
+
+        handle = state.registers.get(reg_index(insn.regs[0]))
+        if handle == 0:
+            raise _Throw("Ljava/lang/NullPointerException;", 0)
+        insns_bytes = self._parser.parse_code_item(code_off).insns
+        table = decode_fill_array_data(insns_bytes, insn.target_uoff)
+        arr = self._heap.get_array(handle)
+        if len(table.elements) > len(arr):
+            raise DexTraceVMError(
+                f"fill-array-data at pc={insn.uoff:#06x}: payload has "
+                f"{len(table.elements)} elements but array length is {len(arr)}"
+            )
+        for i, v in enumerate(table.elements):
+            arr[i] = int(v)
 
     # ------------------------------------------------------------------
     # P5a: try/catch table cache + handler lookup
