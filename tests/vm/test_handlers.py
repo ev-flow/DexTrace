@@ -20,7 +20,7 @@ from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.dalvik.types import DecodedInsn
 from dextrace.vm.engine import DalvikVM
-from dextrace.vm.errors import DexTraceNotImplementedError, DexTraceVMError
+from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.handlers import arithmetic, branch, compare, move, type_conv
 from dextrace.vm.register_file import RegisterFile
@@ -329,15 +329,10 @@ class TestBranchConditionals:
         branch.handle_goto_32(self._branch_insn([]), state)
         assert state.pc == self.TARGET
 
-    def test_packed_switch_raises(self) -> None:
-        state = _state(0)
-        with pytest.raises(DexTraceNotImplementedError):
-            branch.handle_packed_switch(_insn([]), state)
-
-    def test_sparse_switch_raises(self) -> None:
-        state = _state(0)
-        with pytest.raises(DexTraceNotImplementedError):
-            branch.handle_sparse_switch(_insn([]), state)
+    # P5c: packed-switch / sparse-switch are no longer eval-table handlers —
+    # the engine dispatches them inline so it can reach the current frame's
+    # raw insn bytes for payload decoding. Coverage moved to
+    # tests/test_vm_run_p5c.py and tests/vm/test_switch_payload.py.
 
 
 # ---------------------------------------------------------------------------
@@ -564,13 +559,6 @@ class TestMoveHandlers:
         state = _state(0, 0, size=4)
         move.handle_const_wide_high16(_insn(["v0"], param="1"), state)
         assert state.registers.get_wide(0) == (1 << 48)
-
-    def test_const_string(self) -> None:
-        state = _state(0)
-        move.handle_const_string(_insn(["v0"], param='"hello"'), state)
-        # Should store a non-zero hash-based surrogate (not asserting exact value,
-        # just that it was written without error)
-        _ = state.registers.get(0)
 
     def test_move_from16(self) -> None:
         state = _state(0, 77)
