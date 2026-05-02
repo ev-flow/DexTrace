@@ -69,7 +69,7 @@ APK file
 - `extract_api_calls()`, `disasm_method()` — convenience wrappers over the above
 - `parse_manifest()`, `get_apk_permissions()` — manifest helpers
 
-**`src/dextrace/cli/main.py`** dispatches to three CLI subcommands registered via `cmd_*.register(subparser)`.
+**`src/dextrace/cli/main.py`** dispatches to five CLI subcommands registered via `cmd_*.register(subparser)`: `meta`, `dex`, `disasm`, `trace`, and `run`.
 
 ### Quark Engine integration (API extraction stages)
 
@@ -98,6 +98,7 @@ The disassembly pipeline: `bytecode_source.py` → `operand_decoder.py` → `dis
 | DEX structure | `pytest tests/test_dex_parser.py tests/test_dex_header.py` |
 | API extraction | `pytest tests/test_dex_api_extractor.py` |
 | Dalvik / disassembly | `pytest -k disassembler` (or the full set in `docs/development-workflow.md`) |
+| VM / execution engine | `pytest tests/vm/ tests/test_vm_run_p5*.py tests/test_vm_run_p5a_x_p5d.py` |
 
 ## Commit style
 

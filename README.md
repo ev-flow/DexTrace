@@ -92,16 +92,21 @@ DexTrace implements **progressive API tracing stages** aligned with
 ```text
 src/dextrace/
   api.py                  # public Python API entry point
-  cli/                    # CLI entry points
+  cli/                    # CLI entry points (meta, dex, disasm, trace, run)
   core/                   # APK/DEX parsing and API extraction core
   dalvik/                 # Dalvik disassembly and opcode utilities
   manifest/               # binary AndroidManifest parsing
+  vm/                     # Dalvik VM interpreter (engine, heap, handlers, trace)
   errors.py               # shared project exceptions
   version.py              # package version
 
 tests/
   fixtures/               # synthetic fixtures used by tests
+  vm/                     # VM-specific unit tests (handlers, trace, heap)
   test_*.py               # pytest-based test suite
+
+tools/
+  gen_p*.py               # DEX fixture generators for VM test samples
 
 docs/
   modules-overview.md     # module-by-module handoff guide
@@ -150,6 +155,19 @@ Includes:
 #### `src/dextrace/manifest/`
 
 Low-level binary AXML parsing used by manifest-related workflows.
+
+#### `src/dextrace/vm/`
+
+Dalvik VM interpreter for dynamic method execution.
+
+Includes:
+
+* `engine.py`: main interpreter loop, opcode dispatch, frame management
+* `heap.py`: object heap with typed handles and class hierarchy
+* `handlers/`: per-family opcode handlers (arithmetic, array, branch, field, move, type checks)
+* `trace.py`: opt-in `ExecutionTrace` — records one `TraceStep` per executed instruction
+* `android_stubs/`: Android API stubs (SMS, telephony) used for IoC extraction
+* supporting modules: `int_ops.py`, `register_file.py`, `call_frame.py`, `signals.py`, `state.py`
 
 ---
 
@@ -231,6 +249,48 @@ All commands support structured JSON output:
 ```bash
 dextrace dex --api-seq --json sample.apk
 ```
+
+## Dynamic Execution
+
+`dextrace run` executes a single DEX method through the built-in Dalvik VM and
+prints the return value. It supports the full P1–P5 opcode surface: arithmetic,
+field access, arrays, try/catch, vtable dispatch, and invoke-interface.
+
+### Run a method
+
+```bash
+dextrace run classes.dex --entry 'Lcom/example/Foo;->compute(I)I' --arg 10
+```
+
+### Capture Android API calls (IoC extraction)
+
+```bash
+dextrace run malware.dex --entry 'Lcom/evil/SMS;->sendSMS()V' --trace
+```
+
+`--trace` prints captured Android stub calls (SMS, telephony, etc.) as JSON.
+
+### Pass multiple arguments
+
+```bash
+dextrace run classes.dex --entry 'Lcom/example/Foo;->bar(ILjava/lang/String;)I' \
+  --arg 42 --arg hello
+```
+
+Or as a JSON list:
+
+```bash
+dextrace run classes.dex --entry 'Lcom/example/Foo;->bar(II)I' --args '[1, 2]'
+```
+
+### Strict stub mode
+
+```bash
+dextrace run classes.dex --entry 'Lcom/example/Foo;->bar()V' --strict-stubs
+```
+
+Exits with code 2 on any unimplemented Android API call instead of silently
+continuing with a null result.
 
 ## Example Output
 
@@ -327,6 +387,12 @@ pytest -k api_extractor
 
   ```bash
   pytest -k disassembler
+  ```
+
+* VM / execution engine changes:
+
+  ```bash
+  pytest tests/vm/ tests/test_vm_run_p5*.py tests/test_vm_run_p5a_x_p5d.py
   ```
 
 ---

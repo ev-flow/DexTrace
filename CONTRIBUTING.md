@@ -103,11 +103,12 @@ src/dextrace/
 
 Key areas:
 
-* `cli/`: command-line entry points
+* `cli/`: command-line entry points (including `dextrace run` for VM execution)
 * `core/`: APK / DEX parsing and API extraction
 * `dalvik/`: bytecode decoding and disassembly internals
 * `manifest/`: binary manifest parsing
-* `tests/`: pytest test suite and fixtures
+* `vm/`: Dalvik VM interpreter, heap, opcode handlers, and execution trace
+* `tests/`: pytest test suite and fixtures (including `tests/vm/` for VM unit tests)
 
 For more detail, see `docs/modules-overview.md`.
 
@@ -220,6 +221,26 @@ pytest \
   tests/test_all_formats_inferable.py \
   tests/test_generated_bytecode_vectors.py
 ```
+
+### 7. Modify the Dalvik VM interpreter
+
+Typical files:
+
+* `src/dextrace/vm/engine.py` — main interpreter loop and opcode dispatch
+* `src/dextrace/vm/heap.py` — object heap and class hierarchy
+* `src/dextrace/vm/handlers/*.py` — per-family opcode handlers
+* `src/dextrace/vm/trace.py` — ExecutionTrace opt-in recording
+* `src/dextrace/vm/android_stubs/` — Android API stub implementations
+* `src/dextrace/cli/cmd_run.py` — `dextrace run` subcommand
+
+Validate with:
+
+```bash
+pytest tests/vm/ tests/test_vm_run_p5*.py tests/test_vm_run_p5a_x_p5d.py
+```
+
+When adding new opcodes, also add or update the synthetic fixture in `tools/` and
+a corresponding integration test in `tests/test_vm_run_*.py`.
 
 ## Testing guidance
 

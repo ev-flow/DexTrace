@@ -18,16 +18,22 @@ At the current stage, DexTrace includes:
 - DEX structure parsing
 - Dalvik bytecode disassembly support
 - API extraction from parsed bytecode
-- CLI commands for metadata, disassembly, and DEX-oriented inspection
-- pytest coverage across parser, manifest, disassembly, and API extraction areas
+- CLI commands for metadata, disassembly, DEX-oriented inspection, and dynamic execution
+- a Dalvik VM interpreter (`src/dextrace/vm/`) covering the full P1–P5 opcode surface:
+  wide arithmetic, field access, arrays, try/catch, vtable dispatch, invoke-interface,
+  switch payloads, type checks, and opt-in `ExecutionTrace` recording
+- Android API stubs for IoC extraction via `dextrace run --trace`
+- pytest coverage across parser, manifest, disassembly, API extraction, and VM areas
+  (339 tests passing as of Phase 5f + P5.3)
 
-The codebase is already organized into distinct subsystems under:
+The codebase is organized into distinct subsystems under:
 
 - `src/dextrace/cli/`
 - `src/dextrace/core/`
 - `src/dextrace/dalvik/`
 - `src/dextrace/manifest/`
-- `tests/`
+- `src/dextrace/vm/`
+- `tests/` (including `tests/vm/`)
 
 This makes the repository reasonably handoff-friendly once the subsystem boundaries are understood.
 
@@ -38,11 +44,13 @@ This makes the repository reasonably handoff-friendly once the subsystem boundar
 The following areas appear structurally well-defined in the repository.
 
 ### CLI structure
-The project already has a clear CLI split:
+The project has a clear CLI split:
 
 - `cmd_meta.py`
 - `cmd_disasm.py`
 - `cmd_dex.py`
+- `cmd_trace.py`
+- `cmd_run.py` — dynamic execution via the Dalvik VM
 
 ### Core parser boundaries
 APK, manifest, DEX parsing, and API extraction are separated into different modules rather than mixed together in a single file.
@@ -50,8 +58,11 @@ APK, manifest, DEX parsing, and API extraction are separated into different modu
 ### Dalvik internals
 Dalvik-related concerns are separated into opcode metadata, operand decoding, payload handling, size handling, and disassembly support.
 
+### Dalvik VM interpreter
+The `src/dextrace/vm/` subsystem is structurally stable. The engine, heap, and handler modules are decoupled; new opcode families can be added by creating a handler file and calling `register(eval_dict, ...)`. The `ExecutionTrace` opt-in recording adds zero overhead to normal execution paths.
+
 ### Test coverage shape
-The test suite is already organized by subsystem, which makes targeted regression work practical.
+The test suite is organized by subsystem, which makes targeted regression work practical. VM tests live under `tests/vm/` (unit) and `tests/test_vm_run_p5*.py` (integration).
 
 ---
 

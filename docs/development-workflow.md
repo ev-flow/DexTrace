@@ -228,6 +228,41 @@ pytest \
 
 ---
 
+### G. VM interpreter changes
+
+Relevant files:
+
+* `src/dextrace/vm/engine.py` — interpreter loop, frame management, opcode dispatch
+* `src/dextrace/vm/heap.py` — object heap, class hierarchy
+* `src/dextrace/vm/handlers/*.py` — opcode handler families
+* `src/dextrace/vm/trace.py` — ExecutionTrace recording
+* `src/dextrace/vm/android_stubs/` — Android API stubs
+* `src/dextrace/cli/cmd_run.py` — `dextrace run` subcommand
+
+Typical reasons to modify:
+
+* wrong return value from a method
+* incorrect behavior for a specific opcode or opcode family
+* missing Android API stub
+* extending `--trace` output
+* new fixture for a feature not yet covered
+
+Validate with:
+
+```bash
+pytest tests/vm/ tests/test_vm_run_p5*.py tests/test_vm_run_p5a_x_p5d.py
+```
+
+When adding a new opcode family:
+
+1. add a handler file under `src/dextrace/vm/handlers/`
+2. call `register(...)` from `engine.py`
+3. write a synthetic DEX fixture in `tools/gen_pNx_fixture.py`
+4. add an integration test in `tests/test_vm_run_pNx.py`
+5. run the full suite to confirm no regressions
+
+---
+
 ## 4. When to add tests
 
 Add or extend tests when:
