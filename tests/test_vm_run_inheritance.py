@@ -3,9 +3,9 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P3 VM execution integration test — Method Dispatch (invoke-virtual vtable).
+Inheritance VM execution integration test — Method Dispatch (invoke-virtual vtable).
 
-Fixture: tests/fixtures/samples/p3_inheritance.dex
+Fixture: tests/fixtures/samples/inheritance.dex
   class Lp3/Base; {
       public int foo() { return 1; }
   }
@@ -19,14 +19,14 @@ Fixture: tests/fixtures/samples/p3_inheritance.dex
       }
   }
 
-One-liner verification (Phase 3):
-  python tools/gen_p3_fixture.py
+One-liner verification:
+  python tools/gen_inheritance_fixture.py
   python -c "
 from pathlib import Path
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.vm.engine import DalvikVM
-dex = Path('tests/fixtures/samples/p3_inheritance.dex').read_bytes()
+dex = Path('tests/fixtures/samples/inheritance.dex').read_bytes()
 resolver = DexResolver(dex); sig_map = build_sig_to_codeoff_map(dex, resolver)
 vm = DalvikVM(dex, resolver, sig_map)
 assert vm.run('Lp3/Main;->entry()I') == 2
@@ -48,12 +48,12 @@ from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 from dextrace.vm.errors import DexTraceNotImplementedError, DexTraceVMError
 
-FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "p3_inheritance.dex"
+FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "inheritance.dex"
 ENTRY = "Lp3/Main;->entry()I"
 
 
 def test_fixture_exists():
-    assert FIXTURE.exists(), f"P3 fixture not found: {FIXTURE}"
+    assert FIXTURE.exists(), f"fixture not found: {FIXTURE}"
 
 
 @pytest.fixture(scope="module")
@@ -64,7 +64,7 @@ def vm():
     return DalvikVM(dex, resolver, sig_map)
 
 
-class TestVMRunP3:
+class TestVMRunInheritance:
     def test_python_api_returns_2(self, vm):
         """entry() creates Mid, calls foo() via vtable → Mid.foo returns 2."""
         assert vm.run(ENTRY) == 2
@@ -126,29 +126,29 @@ class TestVerboseTraceSink:
         assert vm.run(ENTRY) == 2  # still works, just silent
 
 
-class TestRegressionP1P2:
-    """P1 and P2 regressions must still pass after engine.py P3 changes."""
+class TestRegressionConstReturnFib:
+    """const_return and fibonacci regressions must still pass after inheritance engine changes."""
 
-    def test_p1_still_passes(self):
-        p1_dex = (
-            Path(__file__).parent / "fixtures" / "samples" / "p1_simple.dex"
+    def test_const_return_still_passes(self):
+        const_return_dex = (
+            Path(__file__).parent / "fixtures" / "samples" / "const_return.dex"
         )
-        if not p1_dex.exists():
-            pytest.skip("P1 fixture not found")
-        dex = p1_dex.read_bytes()
+        if not const_return_dex.exists():
+            pytest.skip("const_return fixture not found")
+        dex = const_return_dex.read_bytes()
         resolver = DexResolver(dex)
         sig_map = build_sig_to_codeoff_map(dex, resolver)
         vm = DalvikVM(dex, resolver, sig_map)
         result = vm.run("Lp1;->main()I")
         assert result == 42
 
-    def test_p2_still_passes(self):
-        p2_dex = (
-            Path(__file__).parent / "fixtures" / "samples" / "p2_fib_recursive.dex"
+    def test_fibonacci_still_passes(self):
+        fib_dex = (
+            Path(__file__).parent / "fixtures" / "samples" / "fib_recursive.dex"
         )
-        if not p2_dex.exists():
-            pytest.skip("P2 fixture not found")
-        dex = p2_dex.read_bytes()
+        if not fib_dex.exists():
+            pytest.skip("fib_recursive fixture not found")
+        dex = fib_dex.read_bytes()
         resolver = DexResolver(dex)
         sig_map = build_sig_to_codeoff_map(dex, resolver)
         vm = DalvikVM(dex, resolver, sig_map)

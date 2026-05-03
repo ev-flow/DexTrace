@@ -3,14 +3,14 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-Week 1 / Phase 1 verification tests for dextrace trace + vm/decoder.
+Decode + trace verification tests for dextrace trace + vm/decoder.
 
-Fixture: tests/fixtures/samples/p1_const_return.dex
-  class Lp1; { public static void main() { const/16 v0, 42; return-void; } }
+Fixture: tests/fixtures/samples/const_return.dex
+  class Lp1; { public static int main() { const/16 v0, 42; return v0; } }
 
-One-liner verification (from design doc):
-  python -m dextrace trace tests/fixtures/samples/p1_const_return.dex \
-      --entry 'Lp1;->main()V' | python -c \
+One-liner verification:
+  python -m dextrace trace tests/fixtures/samples/const_return.dex \
+      --entry 'Lp1;->main()I' | python -c \
       "import sys,json; r=json.load(sys.stdin); assert r['instructions'][0]['mnemonic']=='const/16'"
 """
 
@@ -22,9 +22,9 @@ from pathlib import Path
 import pytest
 
 FIXTURE = (
-    Path(__file__).parent / "fixtures" / "samples" / "p1_const_return.dex"
+    Path(__file__).parent / "fixtures" / "samples" / "const_return.dex"
 )
-ENTRY = "Lp1;->main()V"
+ENTRY = "Lp1;->main()I"
 
 
 # ---------------------------------------------------------------------------
@@ -45,11 +45,11 @@ def test_walk_method_first_mnemonic():
 
 
 def test_walk_method_last_mnemonic():
-    """Last instruction of main() must be return-void."""
+    """Last instruction of main() must be return (int)."""
     from dextrace.vm.decoder import walk_method
 
     insns = walk_method(FIXTURE.read_bytes(), ENTRY)
-    assert insns[-1].mnemonic == "return-void"
+    assert insns[-1].mnemonic == "return"
 
 
 def test_walk_method_instruction_count():

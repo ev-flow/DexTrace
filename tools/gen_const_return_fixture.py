@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=duplicate-code  # gen_p1/p2 share DEX builder boilerplate intentionally
+# pylint: disable=duplicate-code  # gen_const_return/fibonacci share DEX builder boilerplate intentionally
 """
-Build tests/fixtures/samples/p1_const_return.dex programmatically.
+Build tests/fixtures/samples/const_return.dex programmatically.
 
 DEX contains one class and one method:
   class:  Lp1;  (extends Ljava/lang/Object;)
-  method: public static void main()
+  method: public static int main()
   body:   const/16 v0, 42
-          return-void
+          return v0
 """
 
 import hashlib
@@ -39,47 +39,47 @@ def _string_data_item(s: str) -> bytes:
     return _uleb128(len(s)) + b + b"\x00"
 
 
-def build_p1_dex() -> (
+def build_const_return_dex() -> (
     bytes
 ):  # pylint: disable=too-many-locals,too-many-statements
     # -----------------------------------------------------------------------
     # String table (must be sorted by Unicode code point — DEX requirement)
-    # "Ljava/lang/Object;" < "Lp1;" < "V" < "main"
+    # "I" < "Ljava/lang/Object;" < "Lp1;" < "main"
     # -----------------------------------------------------------------------
-    strings = ["Ljava/lang/Object;", "Lp1;", "V", "main"]
-    # indices:        0                  1      2     3
+    strings = ["I", "Ljava/lang/Object;", "Lp1;", "main"]
+    # indices:   0          1                2        3
 
     # -----------------------------------------------------------------------
-    # Type IDs (sorted by string index)
-    # type_idx 0 -> string_idx 0  = "Ljava/lang/Object;"
-    # type_idx 1 -> string_idx 1  = "Lp1;"
-    # type_idx 2 -> string_idx 2  = "V"
+    # Type IDs (sorted by descriptor string)
+    # type_idx 0 -> string_idx 0  = "I"
+    # type_idx 1 -> string_idx 1  = "Ljava/lang/Object;"
+    # type_idx 2 -> string_idx 2  = "Lp1;"
     # -----------------------------------------------------------------------
     type_string_ids = [0, 1, 2]
 
     # -----------------------------------------------------------------------
     # Proto IDs
-    # proto 0: ()V  — shorty="V"(2), return_type=type"V"(2), params_off=0
+    # proto 0: ()I  — shorty="I"(0), return_type=type"I"(0), params_off=0
     # -----------------------------------------------------------------------
     # (shorty_string_idx, return_type_idx, parameters_off)
-    proto_ids = [(2, 2, 0)]
+    proto_ids = [(0, 0, 0)]
 
     # -----------------------------------------------------------------------
     # Method IDs
-    # method 0: Lp1;->main()V
-    #   class_idx=1  proto_idx=0  name_string_idx=3
+    # method 0: Lp1;->main()I
+    #   class_idx=2  proto_idx=0  name_string_idx=3
     # -----------------------------------------------------------------------
     # (class_type_idx, proto_idx, name_string_idx)
-    method_ids = [(1, 0, 3)]
+    method_ids = [(2, 0, 3)]
 
     # -----------------------------------------------------------------------
-    # Instructions:  const/16 v0, #42 ; return-void
+    # Instructions:  const/16 v0, #42 ; return v0
     #   const/16   opcode=0x13 fmt=21s: (vA<<8)|op  BBBB
     #              v0: (0<<8)|0x13 = 0x0013, literal = 42 = 0x002A
-    #   return-void opcode=0x0E fmt=10x: (0<<8)|op
-    #              0x000E
+    #   return     opcode=0x0F fmt=11x: (vA<<8)|op
+    #              v0: (0<<8)|0x0F = 0x000F
     # -----------------------------------------------------------------------
-    insns = [0x0013, 0x002A, 0x000E]
+    insns = [0x0013, 0x002A, 0x000F]
 
     header_size = 0x70  # pylint: disable=invalid-name
 
@@ -183,9 +183,9 @@ def build_p1_dex() -> (
     # class_def_item (32 bytes)
     class_def_item = struct.pack(
         "<IIIIIIII",
-        1,  # class_idx -> "Lp1;"
+        2,  # class_idx -> "Lp1;"
         0x1,  # access_flags: public
-        0,  # superclass_idx -> "Ljava/lang/Object;"
+        1,  # superclass_idx -> "Ljava/lang/Object;"
         0,  # interfaces_off
         0xFFFFFFFF,  # source_file_idx: NO_INDEX
         0,  # annotations_off
@@ -243,13 +243,13 @@ def build_p1_dex() -> (
 
 
 if __name__ == "__main__":
-    dex = build_p1_dex()
+    dex = build_const_return_dex()
     out = (
         Path(__file__).parent.parent
         / "tests"
         / "fixtures"
         / "samples"
-        / "p1_const_return.dex"
+        / "const_return.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

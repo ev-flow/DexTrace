@@ -650,7 +650,7 @@ class TestStalePendingResultCleared:
             Path(__file__).parent.parent
             / "fixtures"
             / "samples"
-            / "p1_const_return.dex"
+            / "const_return.dex"
         )
         dex_bytes = fixture.read_bytes()
         resolver = DexResolver(dex_bytes)
@@ -661,5 +661,5 @@ class TestStalePendingResultCleared:
         # external stub result that was never consumed).
         # Then verify that run() still succeeds (it resets pending_result=None
         # at entry per OV-2).
-        result = vm.run("Lp1;->main()V", args=[])
-        assert result is None
+        result = vm.run("Lp1;->main()I", args=[])
+        assert result == 42
