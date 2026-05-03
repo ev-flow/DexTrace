@@ -20,7 +20,6 @@ Design: StringBuilder state is kept in HeapEntry.value (a Python str).
 
 from __future__ import annotations
 
-import time
 from typing import Any, Dict, List
 
 from dextrace.vm.android_stubs import (
@@ -175,7 +174,9 @@ def stub_long_valueof(
     args: List[Any], heap, _trace: List[Dict[str, Any]]
 ) -> StubResult:
     """Long.valueOf(J)Long (static) — args[0:1] are the two halves of a long."""
-    v = args[0] if args else 0
+    lo = (args[0] & 0xFFFF_FFFF) if args else 0
+    hi = (args[1] & 0xFFFF_FFFF) if len(args) > 1 else 0
+    v = (hi << 32) | lo
     handle = heap.allocate(_LONG_OBJ, value=v)
     return ObjectRef(handle)
 
@@ -197,12 +198,14 @@ def stub_boolean_booleanvalue(
     return Value(1 if v else 0)
 
 
+_FAKE_TS_MS = 1_700_000_000_000  # 2023-11-14 approx, matches telephony.py
+
+
 def stub_system_current_time_millis(
     _args: List[Any], _heap, _trace: List[Dict[str, Any]]
 ) -> StubResult:
     """System.currentTimeMillis()J (static) — returns a fake epoch ms."""
-    millis = int(time.time() * 1000)
-    return Wide(millis)
+    return Wide(_FAKE_TS_MS)
 
 
 def stub_sdf_format_object(
