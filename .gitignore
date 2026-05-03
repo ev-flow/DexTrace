@@ -104,3 +104,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# Generated DEX fixtures (run tools/gen_*_fixture.py to regenerate)
+tests/fixtures/samples/*.dex
