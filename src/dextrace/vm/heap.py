@@ -120,6 +120,14 @@ class ObjectHeap:
         """
         return self._entry(handle).value
 
+    def set_value(self, handle: int, value: Any) -> None:
+        """
+        Update the `value` slot of an existing heap entry. Used by stubs that
+        mutate already-allocated objects (e.g. StringBuilder.<init> sets the
+        initial string on a handle that new-instance created with value=None).
+        """
+        self._entry(handle).value = value
+
     # ------------------------------------------------------------------
     # P5d: instance fields
     # ------------------------------------------------------------------
