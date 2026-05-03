@@ -79,9 +79,7 @@ class ObjectHeap:
         slot so array handlers can index it directly.
         """
         if length < 0:
-            raise DexTraceVMError(
-                f"allocate_array: negative length {length}"
-            )
+            raise DexTraceVMError(f"allocate_array: negative length {length}")
         handle = self._next_handle
         self._next_handle += 1
         self._objects[handle] = HeapEntry(
@@ -132,7 +130,9 @@ class ObjectHeap:
     # P5d: instance fields
     # ------------------------------------------------------------------
 
-    def set_instance_field(self, handle: int, field_sig: str, val: Any) -> None:
+    def set_instance_field(
+        self, handle: int, field_sig: str, val: Any
+    ) -> None:
         """
         Store `val` in the named instance field of `handle`. Field key is the
         full Dalvik signature (e.g. "Lp5d/Box;->count:I") so an inherited

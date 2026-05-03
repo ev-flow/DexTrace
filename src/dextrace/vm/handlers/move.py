@@ -44,39 +44,39 @@ def handle_const16(insn: DecodedInsn, state: VMState) -> None:
 def handle_const(insn: DecodedInsn, state: VMState) -> None:
     # const vAA, #+BBBBBBBB
     dest = reg_index(insn.regs[0])
-    val = i32(int(insn.param))
+    val = i32(int(insn.param or 0))
     state.registers.set(dest, val)
 
 
 def handle_const_high16(insn: DecodedInsn, state: VMState) -> None:
     # const/high16 vAA, #+BBBB0000
     dest = reg_index(insn.regs[0])
-    val = i32(int(insn.param) << 16)
+    val = i32(int(insn.param or 0) << 16)
     state.registers.set(dest, val)
 
 
 def handle_const_wide16(insn: DecodedInsn, state: VMState) -> None:
     # const-wide/16 vAA, #+BBBB
     dest = reg_index(insn.regs[0])
-    state.registers.set_wide(dest, int(insn.param))
+    state.registers.set_wide(dest, int(insn.param or 0))
 
 
 def handle_const_wide32(insn: DecodedInsn, state: VMState) -> None:
     # const-wide/32 vAA, #+BBBBBBBB
     dest = reg_index(insn.regs[0])
-    state.registers.set_wide(dest, int(insn.param))
+    state.registers.set_wide(dest, int(insn.param or 0))
 
 
 def handle_const_wide(insn: DecodedInsn, state: VMState) -> None:
     # const-wide vAA, #+BBBBBBBBBBBBBBBB
     dest = reg_index(insn.regs[0])
-    state.registers.set_wide(dest, int(insn.param))
+    state.registers.set_wide(dest, int(insn.param or 0))
 
 
 def handle_const_wide_high16(insn: DecodedInsn, state: VMState) -> None:
     # const-wide/high16 vAA, #+BBBB000000000000
     dest = reg_index(insn.regs[0])
-    state.registers.set_wide(dest, int(insn.param) << 48)
+    state.registers.set_wide(dest, int(insn.param or 0) << 48)
 
 
 # const-string and const-string/jumbo are heap-allocating opcodes (P5d) and

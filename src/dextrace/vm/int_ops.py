@@ -65,7 +65,9 @@ def f64_to_bits(f: float) -> int:
 
 def bits_to_f64(bits: int) -> float:
     """Decode a 64-bit IEEE 754 bit pattern (uint64) to a Python float."""
-    return struct.unpack("<d", struct.pack("<Q", bits & 0xFFFF_FFFF_FFFF_FFFF))[0]
+    return struct.unpack(
+        "<d", struct.pack("<Q", bits & 0xFFFF_FFFF_FFFF_FFFF)
+    )[0]
 
 
 def reg_index(r: str) -> int:

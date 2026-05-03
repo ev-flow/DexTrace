@@ -17,7 +17,6 @@ import math
 import operator
 
 from dextrace.dalvik.types import DecodedInsn
-from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.int_ops import (
     bits_to_f32,
     bits_to_f64,
@@ -74,6 +73,7 @@ def _ieee_rem(a: float, b: float) -> float:
         return float("nan")
     return math.fmod(a, b)
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ def _get_lit(insn: DecodedInsn, state: VMState):
     """Return (dest_idx, a, lit) for 22b/22s lit ops: op vAA, vBB, #+CC."""
     dest = reg_index(insn.regs[0])
     a = state.registers.get(reg_index(insn.regs[1]))
-    lit = int(insn.param)
+    lit = int(insn.param or 0)
     return dest, a, lit
 
 
@@ -147,7 +147,7 @@ def handle_rsub_int(insn: DecodedInsn, state: VMState) -> None:
     # rsub-int vA, vB, #+CCCC  (result = literal - vB)
     dest = reg_index(insn.regs[0])
     b = state.registers.get(reg_index(insn.regs[1]))
-    lit = int(insn.param)
+    lit = int(insn.param or 0)
     state.registers.set(dest, i32(lit - b))
 
 
@@ -607,9 +607,9 @@ def register(eval_table: dict) -> None:
         ("xor-long", operator.xor),
     ]
     for name, op in long_binary:
-        eval_table[name] = (lambda i, s, _op=op: _long2(i, s, _op))
-        eval_table[name + "/2addr"] = (
-            lambda i, s, _op=op: _long2addr(i, s, _op)
+        eval_table[name] = lambda i, s, _op=op: _long2(i, s, _op)
+        eval_table[name + "/2addr"] = lambda i, s, _op=op: _long2addr(
+            i, s, _op
         )
 
     # div-long / rem-long: zero-check, Java truncate-toward-zero
@@ -625,9 +625,9 @@ def register(eval_table: dict) -> None:
         ("ushr-long", _ushr_long_op),
     ]
     for name, op in long_shifts:
-        eval_table[name] = (lambda i, s, _op=op: _long_shift(i, s, _op))
-        eval_table[name + "/2addr"] = (
-            lambda i, s, _op=op: _long_shift_2addr(i, s, _op)
+        eval_table[name] = lambda i, s, _op=op: _long_shift(i, s, _op)
+        eval_table[name + "/2addr"] = lambda i, s, _op=op: _long_shift_2addr(
+            i, s, _op
         )
 
     # long unary
@@ -644,9 +644,9 @@ def register(eval_table: dict) -> None:
         ("rem-float", _ieee_rem),
     ]
     for name, op in float_binary:
-        eval_table[name] = (lambda i, s, _op=op: _float2(i, s, _op))
-        eval_table[name + "/2addr"] = (
-            lambda i, s, _op=op: _float2addr(i, s, _op)
+        eval_table[name] = lambda i, s, _op=op: _float2(i, s, _op)
+        eval_table[name + "/2addr"] = lambda i, s, _op=op: _float2addr(
+            i, s, _op
         )
     eval_table["neg-float"] = handle_neg_float
 
@@ -659,8 +659,8 @@ def register(eval_table: dict) -> None:
         ("rem-double", _ieee_rem),
     ]
     for name, op in double_binary:
-        eval_table[name] = (lambda i, s, _op=op: _double2(i, s, _op))
-        eval_table[name + "/2addr"] = (
-            lambda i, s, _op=op: _double2addr(i, s, _op)
+        eval_table[name] = lambda i, s, _op=op: _double2(i, s, _op)
+        eval_table[name + "/2addr"] = lambda i, s, _op=op: _double2addr(
+            i, s, _op
         )
     eval_table["neg-double"] = handle_neg_double

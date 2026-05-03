@@ -81,7 +81,9 @@ class ClassHierarchy:
         # class_desc → superclass_desc (None for Object / no superclass in DEX).
         # Seeded with the Java built-in chain so catch-walks can resolve external
         # exception types. DEX classes processed in _build override any overlap.
-        self._superclass: Dict[str, Optional[str]] = dict(_JAVA_BUILTIN_SUPERCLASS)
+        self._superclass: Dict[str, Optional[str]] = dict(
+            _JAVA_BUILTIN_SUPERCLASS
+        )
         self._build(dex_bytes, resolver)
 
     # ------------------------------------------------------------------

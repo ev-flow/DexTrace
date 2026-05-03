@@ -44,48 +44,65 @@ def _str_val(heap, handle: int) -> str:
 # URL / HttpURLConnection
 # ---------------------------------------------------------------------------
 
-def stub_url_open_connection(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+
+def stub_url_open_connection(
+    args: List[Any], heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """URL.openConnection()URLConnection — allocates an HttpURLConnection handle."""
     handle = heap.allocate(_HTTP_CONN)
     url_val = _str_val(heap, args[0])
-    trace.append({
-        "api": "Ljava/net/URL;->openConnection()Ljava/net/URLConnection;",
-        "args": [url_val],
-        "return": {"kind": "object", "class": _HTTP_CONN},
-    })
+    trace.append(
+        {
+            "api": "Ljava/net/URL;->openConnection()Ljava/net/URLConnection;",
+            "args": [url_val],
+            "return": {"kind": "object", "class": _HTTP_CONN},
+        }
+    )
     return ObjectRef(handle)
 
 
-def stub_http_set_request_method(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_http_set_request_method(
+    args: List[Any], heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """HttpURLConnection.setRequestMethod(String)V."""
     method = _str_val(heap, args[1] if len(args) > 1 else 0)
-    trace.append({
-        "api": f"{_HTTP_CONN}->setRequestMethod(Ljava/lang/String;)V",
-        "args": [method],
-        "return": {"kind": "void"},
-    })
+    trace.append(
+        {
+            "api": f"{_HTTP_CONN}->setRequestMethod(Ljava/lang/String;)V",
+            "args": [method],
+            "return": {"kind": "void"},
+        }
+    )
     return VOID
 
 
-def stub_http_get_output_stream(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_http_get_output_stream(
+    _args: List[Any], heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """HttpURLConnection.getOutputStream()OutputStream."""
     handle = heap.allocate(_OS)
-    trace.append({
-        "api": f"{_HTTP_CONN}->getOutputStream()Ljava/io/OutputStream;",
-        "args": [],
-        "return": {"kind": "object", "class": _OS},
-    })
+    trace.append(
+        {
+            "api": f"{_HTTP_CONN}->getOutputStream()Ljava/io/OutputStream;",
+            "args": [],
+            "return": {"kind": "object", "class": _OS},
+        }
+    )
     return ObjectRef(handle)
 
 
-def stub_http_get_input_stream(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_http_get_input_stream(
+    _args: List[Any], heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """HttpURLConnection.getInputStream()InputStream."""
     handle = heap.allocate(_IS)
-    trace.append({
-        "api": f"{_HTTP_CONN}->getInputStream()Ljava/io/InputStream;",
-        "args": [],
-        "return": {"kind": "object", "class": _IS},
-    })
+    trace.append(
+        {
+            "api": f"{_HTTP_CONN}->getInputStream()Ljava/io/InputStream;",
+            "args": [],
+            "return": {"kind": "object", "class": _IS},
+        }
+    )
     return ObjectRef(handle)
 
 
@@ -93,18 +110,25 @@ def stub_http_get_input_stream(args: List[Any], heap, trace: List[Dict[str, Any]
 # DataOutputStream
 # ---------------------------------------------------------------------------
 
-def stub_dos_write_bytes(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+
+def stub_dos_write_bytes(
+    args: List[Any], heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """DataOutputStream.writeBytes(String)V."""
     s = _str_val(heap, args[1] if len(args) > 1 else 0)
-    trace.append({
-        "api": f"{_DOS}->writeBytes(Ljava/lang/String;)V",
-        "args": [s],
-        "return": {"kind": "void"},
-    })
+    trace.append(
+        {
+            "api": f"{_DOS}->writeBytes(Ljava/lang/String;)V",
+            "args": [s],
+            "return": {"kind": "void"},
+        }
+    )
     return VOID
 
 
-def stub_dos_flush(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_dos_flush(
+    _args: List[Any], _heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """DataOutputStream.flush()V."""
     return VOID
 
@@ -113,13 +137,18 @@ def stub_dos_flush(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubRe
 # FileInputStream
 # ---------------------------------------------------------------------------
 
-def stub_fis_read(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+
+def stub_fis_read(
+    _args: List[Any], _heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """FileInputStream.read([B)I — returns -1 (EOF) to signal no data."""
-    trace.append({
-        "api": f"{_FIS}->read([B)I",
-        "args": [],
-        "return": {"kind": "int", "value": -1},
-    })
+    trace.append(
+        {
+            "api": f"{_FIS}->read([B)I",
+            "args": [],
+            "return": {"kind": "int", "value": -1},
+        }
+    )
     return Value(-1)
 
 
@@ -127,7 +156,10 @@ def stub_fis_read(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubRes
 # Registration
 # ---------------------------------------------------------------------------
 
-register("Ljava/net/URL;->openConnection()Ljava/net/URLConnection;", stub_url_open_connection)
+register(
+    "Ljava/net/URL;->openConnection()Ljava/net/URLConnection;",
+    stub_url_open_connection,
+)
 register(
     f"{_HTTP_CONN}->setRequestMethod(Ljava/lang/String;)V",
     stub_http_set_request_method,
@@ -145,7 +177,9 @@ register(
 )
 register(
     f"{_BR}->readLine()Ljava/lang/String;",
-    lambda args, heap, trace: ObjectRef(0),  # returns null → terminates read loop
+    lambda args, heap, trace: ObjectRef(
+        0
+    ),  # returns null → terminates read loop
 )
 # System.out.println — invoked after readLine(); System.out is a null static field,
 # so the receiver is 0. Stubbing bypasses the null-receiver check.

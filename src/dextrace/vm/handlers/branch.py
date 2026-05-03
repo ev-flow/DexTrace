@@ -17,8 +17,17 @@ Covers:
 from __future__ import annotations
 
 from dextrace.dalvik.types import DecodedInsn
+from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.int_ops import reg_index
 from dextrace.vm.state import VMState
+
+
+def _target(insn: DecodedInsn) -> int:
+    if insn.target_uoff is None:
+        raise DexTraceVMError(
+            f"{insn.mnemonic} at pc={insn.uoff:#06x}: missing branch target"
+        )
+    return insn.target_uoff
 
 # ---------------------------------------------------------------------------
 # Two-register conditionals (22t)
@@ -29,42 +38,42 @@ def handle_if_eq(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     b = state.registers.get(reg_index(insn.regs[1]))
     if a == b:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 def handle_if_ne(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     b = state.registers.get(reg_index(insn.regs[1]))
     if a != b:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 def handle_if_lt(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     b = state.registers.get(reg_index(insn.regs[1]))
     if a < b:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 def handle_if_ge(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     b = state.registers.get(reg_index(insn.regs[1]))
     if a >= b:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 def handle_if_gt(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     b = state.registers.get(reg_index(insn.regs[1]))
     if a > b:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 def handle_if_le(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     b = state.registers.get(reg_index(insn.regs[1]))
     if a <= b:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 # ---------------------------------------------------------------------------
@@ -75,37 +84,37 @@ def handle_if_le(insn: DecodedInsn, state: VMState) -> None:
 def handle_if_eqz(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     if a == 0:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 def handle_if_nez(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     if a != 0:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 def handle_if_ltz(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     if a < 0:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 def handle_if_gez(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     if a >= 0:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 def handle_if_gtz(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     if a > 0:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 def handle_if_lez(insn: DecodedInsn, state: VMState) -> None:
     a = state.registers.get(reg_index(insn.regs[0]))
     if a <= 0:
-        state.pc = insn.target_uoff
+        state.pc = _target(insn)
 
 
 # ---------------------------------------------------------------------------
@@ -114,15 +123,15 @@ def handle_if_lez(insn: DecodedInsn, state: VMState) -> None:
 
 
 def handle_goto(insn: DecodedInsn, state: VMState) -> None:
-    state.pc = insn.target_uoff
+    state.pc = _target(insn)
 
 
 def handle_goto_16(insn: DecodedInsn, state: VMState) -> None:
-    state.pc = insn.target_uoff
+    state.pc = _target(insn)
 
 
 def handle_goto_32(insn: DecodedInsn, state: VMState) -> None:
-    state.pc = insn.target_uoff
+    state.pc = _target(insn)
 
 
 # ---------------------------------------------------------------------------

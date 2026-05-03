@@ -19,12 +19,12 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from dextrace.vm.android_stubs import (
-    REGISTRY,
     ObjectRef,
     StubResult,
     VOID,
     register,
 )
+from dextrace.vm.errors import DexTraceVMError
 
 _SMS_MANAGER_CLASS = "Landroid/telephony/SmsManager;"
 
@@ -51,12 +51,12 @@ def _resolve_string(heap, handle: int) -> Any:
         return None
     try:
         return heap.get_value(handle)
-    except Exception:
+    except DexTraceVMError:
         return None
 
 
 def stub_get_default(
-    args: List[Any], heap, trace: List[Dict[str, Any]]
+    _args: List[Any], heap, trace: List[Dict[str, Any]]
 ) -> StubResult:
     """SmsManager.getDefault() → returns a SmsManager handle."""
     handle = heap.allocate(_SMS_MANAGER_CLASS)
@@ -64,7 +64,11 @@ def stub_get_default(
         {
             "api": _GET_DEFAULT_SIG,
             "args": [],
-            "return": {"kind": "object", "class": _SMS_MANAGER_CLASS, "handle": handle},
+            "return": {
+                "kind": "object",
+                "class": _SMS_MANAGER_CLASS,
+                "handle": handle,
+            },
         }
     )
     return ObjectRef(handle)

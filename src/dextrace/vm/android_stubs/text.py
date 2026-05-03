@@ -20,10 +20,10 @@ Design: StringBuilder state is kept in HeapEntry.value (a Python str).
 
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, List
 
 from dextrace.vm.android_stubs import (
-    REGISTRY,
     ObjectRef,
     StubResult,
     Value,
@@ -41,7 +41,7 @@ _SDF = "Ljava/text/SimpleDateFormat;"
 
 def _str_val(heap, handle: int) -> str:
     if handle == 0:
-        return "null"
+        return ""
     v = heap.get_value(handle)
     return str(v) if v is not None else ""
 
@@ -50,20 +50,27 @@ def _str_val(heap, handle: int) -> str:
 # StringBuilder
 # ---------------------------------------------------------------------------
 
-def stub_sb_init_void(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+
+def stub_sb_init_void(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """StringBuilder.<init>()V"""
     heap.set_value(args[0], "")
     return VOID
 
 
-def stub_sb_init_string(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_sb_init_string(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """StringBuilder.<init>(String)V"""
     initial = _str_val(heap, args[1] if len(args) > 1 else 0)
     heap.set_value(args[0], initial)
     return VOID
 
 
-def stub_sb_append_string(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_sb_append_string(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """StringBuilder.append(String)StringBuilder — returns self handle."""
     sb_handle = args[0]
     s = _str_val(heap, args[1] if len(args) > 1 else 0)
@@ -72,7 +79,9 @@ def stub_sb_append_string(args: List[Any], heap, trace: List[Dict[str, Any]]) ->
     return ObjectRef(sb_handle)
 
 
-def stub_sb_append_int(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_sb_append_int(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """StringBuilder.append(I)StringBuilder — returns self handle."""
     sb_handle = args[0]
     v = args[1] if len(args) > 1 else 0
@@ -81,7 +90,9 @@ def stub_sb_append_int(args: List[Any], heap, trace: List[Dict[str, Any]]) -> St
     return ObjectRef(sb_handle)
 
 
-def stub_sb_append_object(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_sb_append_object(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """StringBuilder.append(Object)StringBuilder — stringify via get_value."""
     sb_handle = args[0]
     s = _str_val(heap, args[1] if len(args) > 1 else 0)
@@ -90,7 +101,9 @@ def stub_sb_append_object(args: List[Any], heap, trace: List[Dict[str, Any]]) ->
     return ObjectRef(sb_handle)
 
 
-def stub_sb_tostring(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_sb_tostring(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """StringBuilder.toString()String — allocates a new String handle."""
     cur = heap.get_value(args[0]) or ""
     handle = heap.allocate(_STR, value=cur)
@@ -101,21 +114,28 @@ def stub_sb_tostring(args: List[Any], heap, trace: List[Dict[str, Any]]) -> Stub
 # String helpers
 # ---------------------------------------------------------------------------
 
-def stub_string_equals(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+
+def stub_string_equals(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """String.equals(Object)Z — compares the stored Python strings."""
     s1 = _str_val(heap, args[0])
     s2 = _str_val(heap, args[1] if len(args) > 1 else 0)
     return Value(1 if s1 == s2 else 0)
 
 
-def stub_string_valueof_object(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_string_valueof_object(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """String.valueOf(Object)String (static) — args[0] is the object handle."""
     s = _str_val(heap, args[0])
     handle = heap.allocate(_STR, value=s)
     return ObjectRef(handle)
 
 
-def stub_string_getbytes(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_string_getbytes(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """String.getBytes()[B — returns a byte array handle."""
     s = _str_val(heap, args[0])
     encoded = s.encode("utf-8")
@@ -126,14 +146,18 @@ def stub_string_getbytes(args: List[Any], heap, trace: List[Dict[str, Any]]) -> 
     return ObjectRef(arr_handle)
 
 
-def stub_string_last_index_of(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_string_last_index_of(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """String.lastIndexOf(String)I"""
     s = _str_val(heap, args[0])
     sub = _str_val(heap, args[1] if len(args) > 1 else 0)
     return Value(s.rfind(sub))
 
 
-def stub_string_substring(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_string_substring(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """String.substring(I)String"""
     s = _str_val(heap, args[0])
     start = args[1] if len(args) > 1 else 0
@@ -146,40 +170,52 @@ def stub_string_substring(args: List[Any], heap, trace: List[Dict[str, Any]]) ->
 # Long / Boolean / System
 # ---------------------------------------------------------------------------
 
-def stub_long_valueof(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+
+def stub_long_valueof(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """Long.valueOf(J)Long (static) — args[0:1] are the two halves of a long."""
     v = args[0] if args else 0
     handle = heap.allocate(_LONG_OBJ, value=v)
     return ObjectRef(handle)
 
 
-def stub_boolean_valueof(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_boolean_valueof(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """Boolean.valueOf(Z)Boolean (static)."""
     v = args[0] if args else 0
     handle = heap.allocate(_BOOL_OBJ, value=bool(v))
     return ObjectRef(handle)
 
 
-def stub_boolean_booleanvalue(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_boolean_booleanvalue(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """Boolean.booleanValue()Z"""
     v = heap.get_value(args[0])
     return Value(1 if v else 0)
 
 
-def stub_system_current_time_millis(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_system_current_time_millis(
+    _args: List[Any], _heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """System.currentTimeMillis()J (static) — returns a fake epoch ms."""
-    import time
     millis = int(time.time() * 1000)
     return Wide(millis)
 
 
-def stub_sdf_format_object(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_sdf_format_object(
+    _args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """SimpleDateFormat.format(Object)String — returns a synthetic date string."""
     handle = heap.allocate(_STR, value="1970-01-01 00:00:00")
     return ObjectRef(handle)
 
 
-def stub_sdf_format_date(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_sdf_format_date(
+    _args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
     """SimpleDateFormat.format(Date)String — returns a synthetic date string."""
     handle = heap.allocate(_STR, value="1970-01-01 00:00:00")
     return ObjectRef(handle)

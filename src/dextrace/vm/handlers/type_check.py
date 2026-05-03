@@ -46,7 +46,7 @@ def register(
         handle = state.registers.get(reg_index(insn.regs[0]))
         if handle == 0:
             return
-        target = insn.param
+        target = insn.param or ""
         runtime_class = heap.get_class(handle)
         if not hierarchy.is_subtype(runtime_class, target):
             raise _ThrowSignal("Ljava/lang/ClassCastException;", 0)
@@ -58,7 +58,7 @@ def register(
         if handle == 0:
             state.registers.set(dest, 0)
             return
-        target = insn.param
+        target = insn.param or ""
         runtime_class = heap.get_class(handle)
         result = 1 if hierarchy.is_subtype(runtime_class, target) else 0
         state.registers.set(dest, result)

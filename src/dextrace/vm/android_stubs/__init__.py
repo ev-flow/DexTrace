@@ -98,7 +98,10 @@ def register(signature: str, fn: StubCallable) -> None:
 # at package import time. Adding a new stub family means importing it here.
 # ---------------------------------------------------------------------------
 
-from dextrace.vm.android_stubs import sms  # noqa: E402,F401  (side-effect import)
+# pylint: disable=wrong-import-position
+from dextrace.vm.android_stubs import (
+    sms,
+)  # noqa: E402,F401  (side-effect import)
 from dextrace.vm.android_stubs import text  # noqa: E402,F401
 from dextrace.vm.android_stubs import intent  # noqa: E402,F401
 from dextrace.vm.android_stubs import telephony  # noqa: E402,F401

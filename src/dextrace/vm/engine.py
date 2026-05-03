@@ -30,7 +30,7 @@ from __future__ import annotations
 from time import perf_counter_ns
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from dextrace.core.dex_parser import DexParser, TryItem
+from dextrace.core.dex_parser import DexParser, CatchHandler, TryItem
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.dalvik.disassembler import DalvikDisassembler, MethodDisasm
 from dextrace.dalvik.payload import (
@@ -154,7 +154,9 @@ class DalvikVM:
         # P4: Android-API stub registry (DI for tests; defaults to global REGISTRY)
         # Strict mode escalates void external misses to errors as well.
         self._stub_registry: Dict[str, StubCallable] = (
-            stub_registry if stub_registry is not None else DEFAULT_STUB_REGISTRY
+            stub_registry
+            if stub_registry is not None
+            else DEFAULT_STUB_REGISTRY
         )
         self._strict_stubs = strict_stubs
 
@@ -187,7 +189,11 @@ class DalvikVM:
         _sink_ref = self._trace_sink
 
         def _handle_new_instance(insn: DecodedInsn, state: VMState) -> None:
-            class_desc = insn.param  # resolved type descriptor string
+            class_desc = insn.param
+            if not class_desc:
+                raise DexTraceVMError(
+                    f"new-instance at pc={insn.uoff:#06x}: missing type descriptor"
+                )
             handle = _heap_ref.allocate(class_desc)
             state.registers.set(reg_index(insn.regs[0]), handle)
             if _sink_ref is not None:
@@ -358,8 +364,15 @@ class DalvikVM:
                         state.pc = next_pc
                     if trace is not None:
                         self._record_trace(
-                            trace, pre_code_off, code_off, insn, mnemonic,
-                            next_pc, state, pre_regs, t0,
+                            trace,
+                            pre_code_off,
+                            code_off,
+                            insn,
+                            mnemonic,
+                            next_pc,
+                            state,
+                            pre_regs,
+                            t0,
                         )
                     continue
 
@@ -387,8 +400,15 @@ class DalvikVM:
                     # Top-level return — execution complete
                     if trace is not None:
                         self._record_trace(
-                            trace, pre_code_off, code_off, insn, mnemonic,
-                            next_pc, state, pre_regs, t0,
+                            trace,
+                            pre_code_off,
+                            code_off,
+                            insn,
+                            mnemonic,
+                            next_pc,
+                            state,
+                            pre_regs,
+                            t0,
                         )
                     return ret.value
 
@@ -407,8 +427,15 @@ class DalvikVM:
                 state.pending_result_is_wide = ret.is_wide
                 if trace is not None:
                     self._record_trace(
-                        trace, pre_code_off, code_off, insn, mnemonic,
-                        next_pc, state, pre_regs, t0,
+                        trace,
+                        pre_code_off,
+                        code_off,
+                        insn,
+                        mnemonic,
+                        next_pc,
+                        state,
+                        pre_regs,
+                        t0,
                     )
                 continue
             except _ThrowSignal as sig:
@@ -417,7 +444,9 @@ class DalvikVM:
                 # the call stack is empty (uncaught -> top-level error).
                 throw_pc = insn.uoff  # site of the instruction that threw
                 while True:
-                    matched = self._find_handler(code_off, throw_pc, sig.class_desc)
+                    matched = self._find_handler(
+                        code_off, throw_pc, sig.class_desc
+                    )
                     if matched is not None:
                         # Hand off to the catch handler. Lazy-allocate a heap
                         # object if the throw didn't carry one (e.g. div-by-zero
@@ -451,8 +480,15 @@ class DalvikVM:
                     state.pending_result_is_wide = False
                 if trace is not None:
                     self._record_trace(
-                        trace, pre_code_off, code_off, insn, mnemonic,
-                        next_pc, state, pre_regs, t0,
+                        trace,
+                        pre_code_off,
+                        code_off,
+                        insn,
+                        mnemonic,
+                        next_pc,
+                        state,
+                        pre_regs,
+                        t0,
                     )
                 continue
 
@@ -465,8 +501,15 @@ class DalvikVM:
 
             if trace is not None:
                 self._record_trace(
-                    trace, pre_code_off, code_off, insn, mnemonic,
-                    next_pc, state, pre_regs, t0,
+                    trace,
+                    pre_code_off,
+                    code_off,
+                    insn,
+                    mnemonic,
+                    next_pc,
+                    state,
+                    pre_regs,
+                    t0,
                 )
 
     # ------------------------------------------------------------------
@@ -504,16 +547,18 @@ class DalvikVM:
                 if pre_regs[i] != post_regs[i]
             )
             taken = state.pc != next_pc
-        trace.record(TraceStep(
-            code_off=pre_code_off,
-            uoff=insn.uoff,
-            mnemonic=mnemonic,
-            next_pc=state.pc,
-            branch_taken=taken,
-            register_writes=writes,
-            duration_ns=duration,
-            frame_changed=frame_changed,
-        ))
+        trace.record(
+            TraceStep(
+                code_off=pre_code_off,
+                uoff=insn.uoff,
+                mnemonic=mnemonic,
+                next_pc=state.pc,
+                branch_taken=taken,
+                register_writes=writes,
+                duration_ns=duration,
+                frame_changed=frame_changed,
+            )
+        )
 
     # ------------------------------------------------------------------
     # Invoke helper
@@ -607,6 +652,7 @@ class DalvikVM:
         state.pending_result = None
 
         # OV-4: size callee RegisterFile from code_item
+        assert callee_code_off is not None  # resolve_virtual raises on miss
         callee_code = self._parser.parse_code_item(callee_code_off)
         callee_rf = RegisterFile(callee_code.registers_size)
 
@@ -729,6 +775,10 @@ class DalvikVM:
         outside [first_key, first_key + size).
         """
         test_val = i32(state.registers.get(reg_index(insn.regs[0])))
+        if insn.target_uoff is None:
+            raise DexTraceVMError(
+                f"packed-switch at pc={insn.uoff:#06x}: missing payload offset"
+            )
         insns_bytes = self._parser.parse_code_item(code_off).insns
         table = decode_packed_switch(insns_bytes, insn.target_uoff)
         size = len(table.targets)
@@ -747,6 +797,10 @@ class DalvikVM:
         keys are guaranteed sorted ascending so we can early-exit.
         """
         test_val = i32(state.registers.get(reg_index(insn.regs[0])))
+        if insn.target_uoff is None:
+            raise DexTraceVMError(
+                f"sparse-switch at pc={insn.uoff:#06x}: missing payload offset"
+            )
         insns_bytes = self._parser.parse_code_item(code_off).insns
         table = decode_sparse_switch(insns_bytes, insn.target_uoff)
         for k, t in zip(table.keys, table.targets):
@@ -765,11 +819,13 @@ class DalvikVM:
         register. Null array → NPE; payload longer than the array is a hard
         format error (would be rejected by dexopt) so it raises VMError.
         """
-        from dextrace.vm.signals import _ThrowSignal as _Throw
-
         handle = state.registers.get(reg_index(insn.regs[0]))
         if handle == 0:
-            raise _Throw("Ljava/lang/NullPointerException;", 0)
+            raise _ThrowSignal("Ljava/lang/NullPointerException;", 0)
+        if insn.target_uoff is None:
+            raise DexTraceVMError(
+                f"fill-array-data at pc={insn.uoff:#06x}: missing payload offset"
+            )
         insns_bytes = self._parser.parse_code_item(code_off).insns
         table = decode_fill_array_data(insns_bytes, insn.target_uoff)
         arr = self._heap.get_array(handle)
@@ -796,7 +852,7 @@ class DalvikVM:
 
     def _find_handler(
         self, code_off: int, throw_pc: int, exc_class: str
-    ):  # -> Optional[CatchHandler]
+    ) -> Optional[CatchHandler]:
         """
         Return the first CatchHandler in `code_off` whose try block covers
         `throw_pc` AND whose class matches `exc_class` (subtype-aware), or
@@ -809,7 +865,7 @@ class DalvikVM:
         """
         tries = self._get_tries(code_off)
         for tr in tries:
-            if not (tr.start_addr <= throw_pc < tr.end_addr):
+            if not tr.start_addr <= throw_pc < tr.end_addr:
                 continue
             for h in tr.handlers:
                 if h.class_desc is None:

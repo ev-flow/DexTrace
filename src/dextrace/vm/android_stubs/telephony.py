@@ -37,46 +37,63 @@ _FAKE_TS_MS = 1_700_000_000_000  # 2023-11-14 approx
 # SmsMessage
 # ---------------------------------------------------------------------------
 
-def stub_sms_create_from_pdu(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+
+def stub_sms_create_from_pdu(
+    _args: List[Any], heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """SmsMessage.createFromPdu([B)SmsMessage (static)."""
     handle = heap.allocate(_SMS_MSG)
-    trace.append({
-        "api": f"{_SMS_MSG}->createFromPdu([B){_SMS_MSG}",
-        "args": [],
-        "return": {"kind": "object", "class": _SMS_MSG, "handle": handle},
-    })
+    trace.append(
+        {
+            "api": f"{_SMS_MSG}->createFromPdu([B){_SMS_MSG}",
+            "args": [],
+            "return": {"kind": "object", "class": _SMS_MSG, "handle": handle},
+        }
+    )
     return ObjectRef(handle)
 
 
-def stub_sms_get_originating_address(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_sms_get_originating_address(
+    _args: List[Any], heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """SmsMessage.getOriginatingAddress()String."""
     str_handle = heap.allocate(_STR, value=_FAKE_PHONE)
-    trace.append({
-        "api": f"{_SMS_MSG}->getOriginatingAddress()Ljava/lang/String;",
-        "args": [],
-        "return": {"kind": "object", "value": _FAKE_PHONE},
-    })
+    trace.append(
+        {
+            "api": f"{_SMS_MSG}->getOriginatingAddress()Ljava/lang/String;",
+            "args": [],
+            "return": {"kind": "object", "value": _FAKE_PHONE},
+        }
+    )
     return ObjectRef(str_handle)
 
 
-def stub_sms_get_display_message_body(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_sms_get_display_message_body(
+    _args: List[Any], heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """SmsMessage.getDisplayMessageBody()String."""
     str_handle = heap.allocate(_STR, value=_FAKE_BODY)
-    trace.append({
-        "api": f"{_SMS_MSG}->getDisplayMessageBody()Ljava/lang/String;",
-        "args": [],
-        "return": {"kind": "object", "value": _FAKE_BODY},
-    })
+    trace.append(
+        {
+            "api": f"{_SMS_MSG}->getDisplayMessageBody()Ljava/lang/String;",
+            "args": [],
+            "return": {"kind": "object", "value": _FAKE_BODY},
+        }
+    )
     return ObjectRef(str_handle)
 
 
-def stub_sms_get_timestamp_millis(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+def stub_sms_get_timestamp_millis(
+    _args: List[Any], _heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """SmsMessage.getTimestampMillis()J."""
-    trace.append({
-        "api": f"{_SMS_MSG}->getTimestampMillis()J",
-        "args": [],
-        "return": {"kind": "long", "value": _FAKE_TS_MS},
-    })
+    trace.append(
+        {
+            "api": f"{_SMS_MSG}->getTimestampMillis()J",
+            "args": [],
+            "return": {"kind": "long", "value": _FAKE_TS_MS},
+        }
+    )
     return Wide(_FAKE_TS_MS)
 
 
@@ -84,14 +101,19 @@ def stub_sms_get_timestamp_millis(args: List[Any], heap, trace: List[Dict[str, A
 # TelephonyManager
 # ---------------------------------------------------------------------------
 
-def stub_telephony_get_call_state(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+
+def stub_telephony_get_call_state(
+    _args: List[Any], _heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """TelephonyManager.getCallState()I — returns CALL_STATE_RINGING (1)."""
     state = 1  # CALL_STATE_RINGING
-    trace.append({
-        "api": f"{_TEL_MGR}->getCallState()I",
-        "args": [],
-        "return": {"kind": "int", "value": state},
-    })
+    trace.append(
+        {
+            "api": f"{_TEL_MGR}->getCallState()I",
+            "args": [],
+            "return": {"kind": "int", "value": state},
+        }
+    )
     return Value(state)
 
 
@@ -99,7 +121,10 @@ def stub_telephony_get_call_state(args: List[Any], heap, trace: List[Dict[str, A
 # Context.getSystemService
 # ---------------------------------------------------------------------------
 
-def stub_context_get_system_service(args: List[Any], heap, trace: List[Dict[str, Any]]) -> StubResult:
+
+def stub_context_get_system_service(
+    args: List[Any], heap, trace: List[Dict[str, Any]]
+) -> StubResult:
     """Context.getSystemService(String)Object — returns TelephonyManager for 'phone'."""
     svc_name = ""
     if len(args) > 1 and args[1]:
@@ -109,11 +134,17 @@ def stub_context_get_system_service(args: List[Any], heap, trace: List[Dict[str,
         handle = heap.allocate(_TEL_MGR)
     else:
         handle = heap.allocate("Ljava/lang/Object;")
-    trace.append({
-        "api": "Landroid/content/Context;->getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
-        "args": [svc_name],
-        "return": {"kind": "object"},
-    })
+    trace.append(
+        {
+            "api": (
+                "Landroid/content/Context;"
+                "->getSystemService(Ljava/lang/String;)"
+                "Ljava/lang/Object;"
+            ),
+            "args": [svc_name],
+            "return": {"kind": "object"},
+        }
+    )
     return ObjectRef(handle)
 
 

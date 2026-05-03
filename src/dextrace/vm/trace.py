@@ -70,7 +70,9 @@ class ExecutionTrace:
         `frame_changes`. A `goto` always lands here; an `if-eq` lands here
         only when the predicate held.
         """
-        return [s for s in self.steps if s.branch_taken and not s.frame_changed]
+        return [
+            s for s in self.steps if s.branch_taken and not s.frame_changed
+        ]
 
     @property
     def frame_changes(self) -> List[TraceStep]:
