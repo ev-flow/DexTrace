@@ -27,39 +27,22 @@ def register(p: argparse.ArgumentParser) -> None:
         default=[],
         help="Method signature: Lx/y/Z;->m(...)R",
     )
-    p.add_argument(
-        "--methods-file", help="Text file: one method signature per line"
-    )
+    p.add_argument("--methods-file", help="Text file: one method signature per line")
     p.add_argument(
         "--format",
         choices=["smali"],
         default="smali",
         help="Output format (MVP: smali only)",
     )
-    p.add_argument(
-        "--json",
-        action="store_true",
-        help="Output JSON to stdout (MVP: always JSON)",
-    )
-    p.add_argument(
-        "--max-insns",
-        type=int,
-        default=0,
-        help="Max instructions per method (0 = no limit)",
-    )
-    p.add_argument(
-        "--accept-optimized",
-        action="store_true",
-        help="Accept optimized opcodes (default: false)",
-    )
+    p.add_argument("--json", action="store_true", help="Output JSON to stdout (MVP: always JSON)")
+    p.add_argument("--max-insns", type=int, default=0, help="Max instructions per method (0 = no limit)")
+    p.add_argument("--accept-optimized", action="store_true", help="Accept optimized opcodes (default: false)")
     p.set_defaults(func=run)
 
 
 def _read_methods_file(path: str) -> List[str]:
     out: List[str] = []
-    for line in (
-        Path(path).read_text(encoding="utf-8", errors="ignore").splitlines()
-    ):
+    for line in Path(path).read_text(encoding="utf-8", errors="ignore").splitlines():
         s = line.strip()
         if not s or s.startswith("#"):
             continue
@@ -113,9 +96,7 @@ def run(args: argparse.Namespace) -> int:
         methods.extend(_read_methods_file(args.methods_file))
 
     if not methods:
-        raise SystemExit(
-            "disasm requires --method or --methods-file (to avoid huge outputs)."
-        )
+        raise SystemExit("disasm requires --method or --methods-file (to avoid huge outputs).")
 
     input_path = Path(args.input)
     if not input_path.exists():
@@ -161,20 +142,10 @@ def run(args: argparse.Namespace) -> int:
             for ins in m.instructions:
                 # insert label line(s) if needed
                 for lab in labels_by_uoff.get(ins.uoff, []):
-                    ins_list.append(
-                        {
-                            "offset": ins.uoff,
-                            "byte_off": ins.byte_off,
-                            "smali": lab,
-                        }
-                    )
+                    ins_list.append({"offset": ins.uoff, "byte_off": ins.byte_off, "smali": lab})
 
                 ins_list.append(
-                    {
-                        "offset": ins.uoff,
-                        "byte_off": ins.byte_off,
-                        "smali": renderer.to_smali(ins),
-                    }
+                    {"offset": ins.uoff, "byte_off": ins.byte_off, "smali": renderer.to_smali(ins)}
                 )
 
             out["methods"][sig] = {
