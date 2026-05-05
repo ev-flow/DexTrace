@@ -55,7 +55,7 @@ from dextrace.vm.int_ops import i32, i64, reg_index
 from dextrace.vm.register_file import RegisterFile
 from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.state import VMState
-from dextrace.vm.trace import ExecutionTrace, TraceStep
+from dextrace.vm.trace import CallTreeTrace, ExecutionTrace, TraceStep
 
 import dextrace.vm.handlers.arithmetic as _arith
 import dextrace.vm.handlers.array as _array
@@ -127,6 +127,7 @@ class DalvikVM:
         stub_registry: Optional[Dict[str, StubCallable]] = None,
         strict_stubs: bool = False,
         execution_trace: Optional[ExecutionTrace] = None,
+        call_tree_trace: Optional[CallTreeTrace] = None,
     ) -> None:
         self._parser = DexParser(dex_bytes)
         self._resolver = resolver
@@ -146,6 +147,10 @@ class DalvikVM:
         # P5.3: optional structured execution trace. When set, the main
         # _execute loop records one TraceStep per instruction.
         self._execution_trace = execution_trace
+
+        # android_emulator_enhance: optional call-tree trace. Single-use;
+        # create a new instance per vm.run() call.
+        self._call_tree_trace = call_tree_trace
 
         # Object heap and class hierarchy for P3 dispatch
         self._heap = ObjectHeap()
@@ -289,7 +294,11 @@ class DalvikVM:
         state = VMState(registers=rf, pc=0)
         state.pending_result = None  # OV-2: clear at entry
 
+        if self._call_tree_trace:
+            self._call_tree_trace.on_enter(entry_sig)
         result = self._execute(code_off, state)
+        if self._call_tree_trace:
+            self._call_tree_trace.on_exit(result)
         self._final_state = state
         return result
 
@@ -414,6 +423,8 @@ class DalvikVM:
 
                 # Restore caller frame (OV-6)
                 frame = state.call_stack.pop()
+                if self._call_tree_trace:
+                    self._call_tree_trace.on_exit(ret.value)
                 state.registers = frame.caller_registers
                 state.pc = frame.return_pc
 
@@ -469,6 +480,8 @@ class DalvikVM:
                             f"uncaught: {sig.class_desc}"
                         ) from sig
                     frame = state.call_stack.pop()
+                    if self._call_tree_trace:
+                        self._call_tree_trace.on_exit(None)
                     state.registers = frame.caller_registers
                     # Throw site in the caller is the invoke instruction itself.
                     throw_pc = frame.invoke_pc
@@ -681,6 +694,8 @@ class DalvikVM:
         state.registers = callee_rf
         state.pc = 0
 
+        if self._call_tree_trace:
+            self._call_tree_trace.on_enter(callee_sig)
         return callee_code_off
 
     # ------------------------------------------------------------------
@@ -698,6 +713,7 @@ class DalvikVM:
         stub_args: List[Any] = [
             state.registers.get(reg_index(r)) for r in insn.regs
         ]
+        _prev_len = len(self._api_calls)
         try:
             result = stub(stub_args, self._heap, self._api_calls)
         except (DexTraceVMError, DexTraceNotImplementedError, _ThrowSignal):
@@ -706,11 +722,15 @@ class DalvikVM:
             # listing it here, the broad `except Exception` below would wrap
             # the signal in a DexTraceVMError("stub failed ...") and the
             # in-method catch block would never see it.
+            if self._call_tree_trace and len(self._api_calls) > _prev_len:
+                self._call_tree_trace.on_stub(self._api_calls[-1])
             raise
         except Exception as exc:  # pylint: disable=broad-exception-caught
             raise DexTraceVMError(
                 f"stub failed for {callee_sig} (pc={insn.uoff:#06x}): {exc}"
             ) from exc
+        if self._call_tree_trace and len(self._api_calls) > _prev_len:
+            self._call_tree_trace.on_stub(self._api_calls[-1])
 
         if result is VOID:
             # Void stubs leave a 0 in pending_result; OV-3's stale guard

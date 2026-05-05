@@ -30,6 +30,7 @@ from dextrace.core.dex_resolver import DexResolver
 from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.vm.engine import DalvikVM
 from dextrace.vm.errors import DexTraceVMError, DexTraceNotImplementedError
+from dextrace.vm.trace import CallTreeTrace
 
 
 def register(p: argparse.ArgumentParser) -> None:
@@ -73,7 +74,10 @@ def register(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--trace",
         action="store_true",
-        help="Print captured Android-API stub calls as JSON to stdout",
+        help=(
+            "Print the call tree (entry method → internal nodes → API stubs) "
+            "to stdout. With --json, emits flat api_calls JSON instead."
+        ),
     )
     p.add_argument(
         "--strict-stubs",
@@ -205,12 +209,14 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
         method_args = [_parse_one_arg(a) for a in args.args]
 
     # --- Run -------------------------------------------------------------
+    tree = CallTreeTrace() if (args.trace and not args.json) else None
     vm = DalvikVM(
         dex_bytes,
         resolver,
         sig_to_codeoff,
         trace_sink=_info if args.verbose else None,
         strict_stubs=args.strict_stubs,
+        call_tree_trace=tree,
     )
 
     if args.verbose:
@@ -233,8 +239,8 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
         _print_json(result, vm.api_calls if args.trace else None)
     else:
         _print_text(result)
-        if args.trace:
-            _print_trace(vm.api_calls)
+        if args.trace and tree is not None:
+            _print_call_tree(tree)
 
     if args.dump_regs:
         _print_registers(vm.final_registers)
@@ -265,9 +271,74 @@ def _print_json(result, api_calls=None) -> None:
     print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
-def _print_trace(api_calls) -> None:
-    """Print the captured stub-call trace as JSON to stdout."""
-    print(json.dumps({"api_calls": api_calls}, indent=2, ensure_ascii=False))
+def _print_call_tree(tree: CallTreeTrace) -> None:
+    """Render the call tree to stdout. No-op if root is None (empty run)."""
+    root = tree.root
+    if root is None:
+        return
+    _render_node(root, prefix="", is_root=True)
+
+
+def _render_node(node, prefix: str, is_root: bool) -> None:
+    if is_root:
+        print(node.sig)
+    elif node.is_stub:
+        print(f"{prefix}|- {node.sig}({_fmt_args(node)})")
+    else:
+        print(f"{prefix}|- {node.sig}")
+
+    child_prefix = "" if is_root else prefix + "|  "
+
+    for i, child in enumerate(node.children):
+        _render_node(child, child_prefix, is_root=False)
+        if i < len(node.children) - 1:
+            print(child_prefix)
+
+    ret = _fmt_return(node.return_val, node.is_stub)
+    if ret is None and is_root:
+        rv = node.return_val
+        ret = "void" if rv is None else str(rv)
+    if ret is None:
+        return
+
+    if is_root:
+        print(f"- return: {ret}")
+    elif ret.startswith("- "):
+        print(f"{child_prefix}- return:")
+        print(f"{child_prefix}  {ret}")
+    else:
+        print(f"{child_prefix}- return: {ret}")
+
+
+def _fmt_args(node) -> str:
+    if not node.args:
+        return ""
+    parts = []
+    for a in node.args:
+        if a is None:
+            parts.append("null")
+        elif isinstance(a, str):
+            parts.append(f'"{a}"')
+        else:
+            parts.append(str(a))
+    return ", ".join(parts)
+
+
+def _fmt_return(val, is_stub: bool):
+    if not is_stub:
+        return None
+    if val is None:
+        return "[exception]"
+    if not isinstance(val, dict):
+        return str(val)
+    kind = val.get("kind", "")
+    if kind == "void":
+        return "void"
+    if kind == "int":
+        return str(val.get("value", 0))
+    if kind == "object":
+        return "- " + val.get("class", "?") + " object"
+    return str(val)
 
 
 def _print_registers(rf) -> None:
