@@ -28,7 +28,7 @@ from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.state import VMState
 
 FIXTURE = (
-    Path(__file__).parent.parent / "fixtures" / "samples" / "p5c_dispatch.dex"
+    Path(__file__).parent.parent / "fixtures" / "samples" / "packed_switch.dex"
 )
 
 

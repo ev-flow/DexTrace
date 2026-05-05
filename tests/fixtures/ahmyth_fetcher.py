@@ -3,7 +3,7 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-tests/fixtures/p4_ahmyth_fetcher.py — Lazy fetcher for the P4 malware sample.
+tests/fixtures/ahmyth_fetcher.py — Lazy fetcher for the Ahmyth malware sample.
 
 Why not commit the APK? Real malware in tests/fixtures/ trips AV scanners on
 contributor laptops, CI runners, and forge mirrors. Quark and other security

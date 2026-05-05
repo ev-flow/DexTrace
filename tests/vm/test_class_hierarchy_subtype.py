@@ -21,7 +21,7 @@ from dextrace.vm.class_hierarchy import ClassHierarchy
 # behavior is mostly driven by the Java built-in seed, which is independent
 # of the DEX content.
 FIXTURE = (
-    Path(__file__).parent.parent / "fixtures" / "samples" / "p5a_try_catch.dex"
+    Path(__file__).parent.parent / "fixtures" / "samples" / "try_catch.dex"
 )
 
 

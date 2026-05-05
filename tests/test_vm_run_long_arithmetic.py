@@ -3,9 +3,9 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P5b integration test — long arithmetic via the full VM.
+Long arithmetic integration test via the full VM.
 
-Fixture: tests/fixtures/samples/p5b_long_arith.dex
+Fixture: tests/fixtures/samples/long_arith.dex
   Lp5b;->longSum(I)J:
       long a = (long) n;
       long b = a + a;          // 2n
@@ -24,7 +24,7 @@ from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
-FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "p5b_long_arith.dex"
+FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "long_arith.dex"
 ENTRY = "Lp5b;->longSum(I)J"
 
 

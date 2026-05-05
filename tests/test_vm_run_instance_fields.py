@@ -3,9 +3,9 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P5d integration test — instance + static field round-trip via the full VM.
+Instance + static field round-trip integration test via the full VM.
 
-Fixture: tests/fixtures/samples/p5d_fields.dex
+Fixture: tests/fixtures/samples/instance_fields.dex
   Lp5d;->fieldRoundtrip(I)I:
       Box box = new Box();
       box.n   = arg;          // iput
@@ -26,7 +26,7 @@ from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
-FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "p5d_fields.dex"
+FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "instance_fields.dex"
 ENTRY = "Lp5d;->fieldRoundtrip(I)I"
 
 

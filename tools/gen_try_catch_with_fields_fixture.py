@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
 """
-Build tests/fixtures/samples/p5a_x_p5d_npe.dex programmatically.
+Build tests/fixtures/samples/try_catch_npe_with_fields.dex programmatically.
 
 Cross-phase combo: P5d's null-receiver iget-object throws NPE, P5a's catch
 walker resolves it via the seeded Java exception hierarchy, and the in-method
@@ -18,7 +18,7 @@ Method:
     }
 
 Verification:
-  python -m dextrace run tests/fixtures/samples/p5a_x_p5d_npe.dex \\
+  python -m dextrace run tests/fixtures/samples/try_catch_npe_with_fields.dex \\
       --entry 'Lp5ad;->igetNpe()I'
   # → return: 99
 """
@@ -277,7 +277,7 @@ if __name__ == "__main__":
         / "tests"
         / "fixtures"
         / "samples"
-        / "p5a_x_p5d_npe.dex"
+        / "try_catch_npe_with_fields.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

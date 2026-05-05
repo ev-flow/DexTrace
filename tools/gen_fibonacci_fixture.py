@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=duplicate-code  # gen_p1/p2 share DEX builder boilerplate intentionally
+# pylint: disable=duplicate-code  # gen_const_return/fibonacci share DEX builder boilerplate intentionally
 """
-Build tests/fixtures/samples/p2_fib_recursive.dex programmatically.
+Build tests/fixtures/samples/fib_recursive.dex programmatically.
 
 DEX contains one class and one method:
   class:  Lp2/Fib;  (extends Ljava/lang/Object;)
@@ -60,7 +60,7 @@ def _string_data_item(s: str) -> bytes:
     return _uleb128(len(s)) + b + b"\x00"
 
 
-def build_p2_dex() -> (
+def build_fibonacci_dex() -> (
     bytes
 ):  # pylint: disable=too-many-locals,too-many-statements
     # -----------------------------------------------------------------------
@@ -309,13 +309,13 @@ def build_p2_dex() -> (
 
 
 if __name__ == "__main__":
-    dex = build_p2_dex()
+    dex = build_fibonacci_dex()
     out = (
         Path(__file__).parent.parent
         / "tests"
         / "fixtures"
         / "samples"
-        / "p2_fib_recursive.dex"
+        / "fib_recursive.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

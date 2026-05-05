@@ -3,9 +3,9 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P5c integration test — packed-switch dispatch via the full VM.
+Packed-switch dispatch integration test via the full VM.
 
-Fixture: tests/fixtures/samples/p5c_dispatch.dex
+Fixture: tests/fixtures/samples/packed_switch.dex
   Lp5c;->switchCast(I)I:
     switch (n) {
       case 0: return 100;
@@ -26,7 +26,7 @@ from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
-FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "p5c_dispatch.dex"
+FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "packed_switch.dex"
 ENTRY = "Lp5c;->switchCast(I)I"
 
 

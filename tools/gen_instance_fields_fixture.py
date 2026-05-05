@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
 """
-Build tests/fixtures/samples/p5d_fields.dex programmatically.
+Build tests/fixtures/samples/instance_fields.dex programmatically.
 
 Method:
   Lp5d;->fieldRoundtrip(I)I  (static)
@@ -15,7 +15,7 @@ Method:
   -> 21 -> 42
 
 Verification:
-  dextrace run tests/fixtures/samples/p5d_fields.dex \\
+  dextrace run tests/fixtures/samples/instance_fields.dex \\
       --entry 'Lp5d;->fieldRoundtrip(I)I' --arg 21
   # -> return: 42
 """
@@ -44,7 +44,7 @@ def _string_data_item(s: str) -> bytes:
     return _uleb128(len(s)) + b + b"\x00"
 
 
-def build_p5d_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
+def build_instance_fields_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
     # Strings (sorted by MUTF-8 byte order)
     strings = [
         "I",                   # 0
@@ -266,13 +266,13 @@ def build_p5d_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statem
 
 
 if __name__ == "__main__":
-    dex = build_p5d_dex()
+    dex = build_instance_fields_dex()
     out = (
         Path(__file__).parent.parent
         / "tests"
         / "fixtures"
         / "samples"
-        / "p5d_fields.dex"
+        / "instance_fields.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

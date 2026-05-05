@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
 """
-Build tests/fixtures/samples/p5e_arrays.dex programmatically.
+Build tests/fixtures/samples/arrays.dex programmatically.
 
 Method:
   Lp5e;->arraySum()I  (static, no args)
@@ -15,7 +15,7 @@ Method:
   -> 60
 
 Verification:
-  python -m dextrace run tests/fixtures/samples/p5e_arrays.dex \\
+  python -m dextrace run tests/fixtures/samples/arrays.dex \\
       --entry 'Lp5e;->arraySum()I'
   # → return: 60
 """
@@ -237,7 +237,7 @@ if __name__ == "__main__":
         / "tests"
         / "fixtures"
         / "samples"
-        / "p5e_arrays.dex"
+        / "arrays.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

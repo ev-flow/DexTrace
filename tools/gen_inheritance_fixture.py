@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=duplicate-code  # gen_p1/p2/p3 share DEX builder boilerplate intentionally
+# pylint: disable=duplicate-code  # gen_const_return/fibonacci/inheritance share DEX builder boilerplate intentionally
 """
-Build tests/fixtures/samples/p3_inheritance.dex programmatically.
+Build tests/fixtures/samples/inheritance.dex programmatically.
 
 Class hierarchy:
   Lp3/Base;  extends Ljava/lang/Object;
@@ -16,7 +16,7 @@ Class hierarchy:
     }
 
 Verification:
-  python -m dextrace run tests/fixtures/samples/p3_inheritance.dex \\
+  python -m dextrace run tests/fixtures/samples/inheritance.dex \\
       --entry 'Lp3/Main;->entry()I'
   # → return: 2
 """
@@ -57,7 +57,7 @@ def _string_data_item(s: str) -> bytes:
 # DEX builder
 # ---------------------------------------------------------------------------
 
-def build_p3_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
+def build_inheritance_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
     # -----------------------------------------------------------------------
     # String table (sorted by MUTF-8 code point — DEX requirement)
     #  0: "<init>"
@@ -406,13 +406,13 @@ def build_p3_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-stateme
 
 
 if __name__ == "__main__":
-    dex = build_p3_dex()
+    dex = build_inheritance_dex()
     out = (
         Path(__file__).parent.parent
         / "tests"
         / "fixtures"
         / "samples"
-        / "p3_inheritance.dex"
+        / "inheritance.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

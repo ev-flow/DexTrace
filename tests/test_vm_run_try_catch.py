@@ -3,9 +3,9 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P5a integration test — try / catch / throw / move-exception.
+Try/catch integration test — try / catch / throw / move-exception.
 
-Fixture: tests/fixtures/samples/p5a_try_catch.dex
+Fixture: tests/fixtures/samples/try_catch.dex
   class Lp5a; {
       public static int divCatch(int a, int b) {
           try {
@@ -16,8 +16,8 @@ Fixture: tests/fixtures/samples/p5a_try_catch.dex
       }
   }
 
-One-liner verification (Phase 5a):
-  dextrace run tests/fixtures/samples/p5a_try_catch.dex \\
+One-liner verification:
+  dextrace run tests/fixtures/samples/try_catch.dex \\
       --entry 'Lp5a;->divCatch(II)I' --arg 10 --arg 0
   # → return: -1
 """
@@ -32,12 +32,12 @@ from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
-FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "p5a_try_catch.dex"
+FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "try_catch.dex"
 ENTRY = "Lp5a;->divCatch(II)I"
 
 
 def test_fixture_exists():
-    assert FIXTURE.exists(), f"P5a fixture not found: {FIXTURE}"
+    assert FIXTURE.exists(), f"fixture not found: {FIXTURE}"
 
 
 @pytest.fixture(scope="module")

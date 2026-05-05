@@ -337,7 +337,7 @@ def _fmt_return(val, is_stub: bool):
     if kind == "int":
         return str(val.get("value", 0))
     if kind == "object":
-        return "- " + val.get("class", "?") + " object"
+        return "- " + val.get("class", "Ljava/lang/Object;") + " object"
     return str(val)
 
 

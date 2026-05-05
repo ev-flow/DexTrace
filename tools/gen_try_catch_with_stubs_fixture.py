@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
 """
-Build tests/fixtures/samples/p5a_x_stub.dex programmatically.
+Build tests/fixtures/samples/try_catch_with_stubs.dex programmatically.
 
 This is a P5a × stub-throws cross-phase combo: a stub raises
 _ThrowSignal(IOException) and the in-method catch block recovers it. Verifies
@@ -58,7 +58,7 @@ def _string_data_item(s: str) -> bytes:
     return _uleb128(len(s)) + b + b"\x00"
 
 
-def build_p5a_x_stub_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
+def build_try_catch_with_stubs_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
     # Strings (sorted by MUTF-8)
     #  0: "I"
     #  1: "Ldemo/Net;"
@@ -282,13 +282,13 @@ def build_p5a_x_stub_dex() -> bytes:  # pylint: disable=too-many-locals,too-many
 
 
 if __name__ == "__main__":
-    dex = build_p5a_x_stub_dex()
+    dex = build_try_catch_with_stubs_dex()
     out = (
         Path(__file__).parent.parent
         / "tests"
         / "fixtures"
         / "samples"
-        / "p5a_x_stub.dex"
+        / "try_catch_with_stubs.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

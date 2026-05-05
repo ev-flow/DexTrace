@@ -3,26 +3,26 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P4 VM execution integration test — Android API stub dispatch on real malware.
+API stubs VM execution integration test — Android API stub dispatch on real malware.
 
 Sample: Ahmyth (Android RAT). Specifically:
   Lahmyth/mine/king/ahmyth/SMSManager;->sendSMS(Ljava/lang/String;Ljava/lang/String;)Z
 
 The method is `public static`, calls SmsManager.getDefault() then
-sendTextMessage(), and returns 1 on the linear no-throw path. Phase 4 stubs
+sendTextMessage(), and returns 1 on the linear no-throw path. The API stubs
 both APIs; the test asserts that the captured trace includes the phone +
 message text the analyst passed in (the "real IoC").
 
-Sample lookup: tests/fixtures/p4_ahmyth_fetcher.get_apk_path()
+Sample lookup: tests/fixtures/ahmyth_fetcher.get_apk_path()
   - $DEXTRACE_AHMYTH_APK env var → local copy
   - ~/.cache/dextrace/p4_ahmyth.apk
   - download from MalwareBazaar (SHA256-locked)
 Offline contributors: pytest.skip on FetcherError so CI/local runs stay green.
 
-One-liner verification (Phase 4):
+One-liner verification:
   DEXTRACE_AHMYTH_APK=/path/to/Ahmyth.apk python -c "
 import sys; sys.path.insert(0,'tests/fixtures')
-from p4_ahmyth_fetcher import get_apk_path
+from ahmyth_fetcher import get_apk_path
 from dextrace.cli._io import load_dex_bytes
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.core.dex_code_map import build_sig_to_codeoff_map
@@ -47,7 +47,7 @@ import pytest
 _FIXTURES = Path(__file__).parent / "fixtures"
 sys.path.insert(0, str(_FIXTURES))
 
-from p4_ahmyth_fetcher import FetcherError, get_apk_path  # noqa: E402
+from ahmyth_fetcher import FetcherError, get_apk_path  # noqa: E402
 
 from dextrace.cli._io import load_dex_bytes  # noqa: E402
 from dextrace.core.dex_code_map import build_sig_to_codeoff_map  # noqa: E402
@@ -71,7 +71,7 @@ SEND_TEXT_API = (
     ")V"
 )
 PHONE = "+15555550100"
-MESSAGE = "hello from dextrace p4"
+MESSAGE = "hello from dextrace"
 
 
 @pytest.fixture(scope="module")

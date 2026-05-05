@@ -3,9 +3,9 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P5f integration test — invoke-interface routes through runtime vtable.
+Interface dispatch integration test — invoke-interface routes through runtime vtable.
 
-Fixture: tests/fixtures/samples/p5f_interface.dex
+Fixture: tests/fixtures/samples/interface_dispatch.dex
   Lp5f;->callIFace()I:
       Lp5f obj = new Lp5f();
       return obj.value();           // invoke-interface dispatch on runtime class
@@ -26,7 +26,7 @@ from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
-FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "p5f_interface.dex"
+FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "interface_dispatch.dex"
 ENTRY = "Lp5f;->callIFace()I"
 
 

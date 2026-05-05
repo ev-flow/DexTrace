@@ -20,7 +20,7 @@ from dextrace.vm.engine import DalvikVM
 from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.signals import _ThrowSignal
 
-FIXTURE = Path(__file__).parent.parent / "fixtures" / "samples" / "p5a_try_catch.dex"
+FIXTURE = Path(__file__).parent.parent / "fixtures" / "samples" / "try_catch.dex"
 
 
 @pytest.fixture(scope="module")

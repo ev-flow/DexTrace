@@ -3,9 +3,9 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P5e integration test — array round-trip via the full VM.
+Array round-trip integration test via the full VM.
 
-Fixture: tests/fixtures/samples/p5e_arrays.dex
+Fixture: tests/fixtures/samples/arrays.dex
   Lp5e;->arraySum()I:
       int[] arr = new int[3];               // new-array
       fill-array-data arr, [10, 20, 30];     // fill-array-data
@@ -26,7 +26,7 @@ from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
-FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "p5e_arrays.dex"
+FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "arrays.dex"
 ENTRY = "Lp5e;->arraySum()I"
 
 

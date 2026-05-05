@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
 """
-Build tests/fixtures/samples/p5f_interface.dex programmatically.
+Build tests/fixtures/samples/interface_dispatch.dex programmatically.
 
 Class layout:
   Lp5f;
@@ -23,7 +23,7 @@ Why this exercises invoke-interface:
   correct behavior because in real DEX both forms reach the same dispatch.
 
 Verification:
-  dextrace run tests/fixtures/samples/p5f_interface.dex \\
+  dextrace run tests/fixtures/samples/interface_dispatch.dex \\
       --entry 'Lp5f;->callIFace()I'
   # → return: 7
 """
@@ -264,7 +264,7 @@ if __name__ == "__main__":
         / "tests"
         / "fixtures"
         / "samples"
-        / "p5f_interface.dex"
+        / "interface_dispatch.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

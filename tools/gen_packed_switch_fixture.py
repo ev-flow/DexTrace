@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
 """
-Build tests/fixtures/samples/p5c_dispatch.dex programmatically.
+Build tests/fixtures/samples/packed_switch.dex programmatically.
 
 Method:
   Lp5c;->switchCast(I)I  (static)
@@ -15,7 +15,7 @@ Method:
     }
 
 Verification:
-  dextrace run tests/fixtures/samples/p5c_dispatch.dex \\
+  dextrace run tests/fixtures/samples/packed_switch.dex \\
       --entry 'Lp5c;->switchCast(I)I' --arg 2
   # -> return: 200
 """
@@ -48,7 +48,7 @@ def _string_data_item(s: str) -> bytes:
     return _uleb128(len(s)) + b + b"\x00"
 
 
-def build_p5c_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
+def build_packed_switch_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
     # Strings sorted by MUTF-8 (prefix-shorter comes first).
     strings = [
         "I",                  # 0
@@ -251,13 +251,13 @@ def build_p5c_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statem
 
 
 if __name__ == "__main__":
-    dex = build_p5c_dex()
+    dex = build_packed_switch_dex()
     out = (
         Path(__file__).parent.parent
         / "tests"
         / "fixtures"
         / "samples"
-        / "p5c_dispatch.dex"
+        / "packed_switch.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

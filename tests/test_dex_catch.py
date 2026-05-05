@@ -20,7 +20,7 @@ from dextrace.core.dex_parser import CatchHandler, DexParser, TryItem
 from dextrace.core.dex_resolver import DexResolver
 
 FIXTURE = (
-    Path(__file__).parent / "fixtures" / "samples" / "p5a_try_catch.dex"
+    Path(__file__).parent / "fixtures" / "samples" / "try_catch.dex"
 )
 ENTRY = "Lp5a;->divCatch(II)I"
 
@@ -68,7 +68,7 @@ def test_catch_resolves_to_arithmetic_exception(context):
 def test_method_without_tries_returns_empty_list():
     """A code_item with tries_size=0 must return [] without touching post-insns bytes."""
     # Use the P3 inheritance fixture: every method has tries_size=0.
-    p3 = Path(__file__).parent / "fixtures" / "samples" / "p3_inheritance.dex"
+    p3 = Path(__file__).parent / "fixtures" / "samples" / "inheritance.dex"
     if not p3.exists():
         pytest.skip("P3 fixture not present")
     dex = p3.read_bytes()

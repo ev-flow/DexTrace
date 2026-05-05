@@ -23,8 +23,8 @@ from dextrace.vm.engine import DalvikVM
 from dextrace.vm.trace import ExecutionTrace, TraceStep
 
 
-P5E = Path(__file__).parent.parent / "fixtures" / "samples" / "p5e_arrays.dex"
-P5F = Path(__file__).parent.parent / "fixtures" / "samples" / "p5f_interface.dex"
+P5E = Path(__file__).parent.parent / "fixtures" / "samples" / "arrays.dex"
+P5F = Path(__file__).parent.parent / "fixtures" / "samples" / "interface_dispatch.dex"
 
 
 def _make_vm(fixture: Path, trace: ExecutionTrace) -> DalvikVM:

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
 """
-Build tests/fixtures/samples/p5b_long_arith.dex programmatically.
+Build tests/fixtures/samples/long_arith.dex programmatically.
 
 Method:
   Lp5b;->longSum(I)J  (static)
@@ -13,7 +13,7 @@ Method:
   -> 100 * 300 = 30000
 
 Verification:
-  dextrace run tests/fixtures/samples/p5b_long_arith.dex \\
+  dextrace run tests/fixtures/samples/long_arith.dex \\
       --entry 'Lp5b;->longSum(I)J' --arg 100
   # -> return: 30000
 """
@@ -46,7 +46,7 @@ def _string_data_item(s: str) -> bytes:
     return _uleb128(len(s)) + b + b"\x00"
 
 
-def build_p5b_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
+def build_long_arithmetic_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
     # Strings (sorted by MUTF-8)
     strings = [
         "I",                  # 0
@@ -217,13 +217,13 @@ def build_p5b_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statem
 
 
 if __name__ == "__main__":
-    dex = build_p5b_dex()
+    dex = build_long_arithmetic_dex()
     out = (
         Path(__file__).parent.parent
         / "tests"
         / "fixtures"
         / "samples"
-        / "p5b_long_arith.dex"
+        / "long_arith.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

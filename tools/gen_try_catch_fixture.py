@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=duplicate-code  # gen_p1/p2/p3/p5a share DEX builder boilerplate intentionally
 """
-Build tests/fixtures/samples/p5a_try_catch.dex programmatically.
+Build tests/fixtures/samples/try_catch.dex programmatically.
 
 Method:
   Lp5a;->divCatch(II)I  (static)
@@ -10,7 +10,7 @@ Method:
     catch (Ljava/lang/ArithmeticException;) { return -1 }
 
 Verification:
-  python -m dextrace run tests/fixtures/samples/p5a_try_catch.dex \\
+  python -m dextrace run tests/fixtures/samples/try_catch.dex \\
       --entry 'Lp5a;->divCatch(II)I' --arg 10 --arg 0
   # → return: -1
 """
@@ -58,7 +58,7 @@ def _string_data_item(s: str) -> bytes:
     return _uleb128(len(s)) + b + b"\x00"
 
 
-def build_p5a_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
+def build_try_catch_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
     # -----------------------------------------------------------------------
     # Strings (sorted by MUTF-8 code point)
     #  0: "I"
@@ -314,13 +314,13 @@ def build_p5a_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statem
 
 
 if __name__ == "__main__":
-    dex = build_p5a_dex()
+    dex = build_try_catch_dex()
     out = (
         Path(__file__).parent.parent
         / "tests"
         / "fixtures"
         / "samples"
-        / "p5a_try_catch.dex"
+        / "try_catch.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

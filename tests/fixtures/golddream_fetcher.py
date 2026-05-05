@@ -7,7 +7,7 @@ tests/fixtures/golddream_fetcher.py — Lazy fetcher for the GoldDream sample.
 
 Lookup order:
   1. $DEXTRACE_GOLDDREAM_APK env var → absolute path to a local copy
-  2. ~/codespace/dextrace_enforcements/scenario_golddream/golddream/<sha256>.apk
+  2. ~/codespace/dextrace_enforcements/<sha256>.apk
   3. ~/.cache/dextrace/golddream.apk (cached fetch)
 
 SHA256-locked. Tests skip on FetcherError so offline runs remain green.
@@ -47,11 +47,9 @@ def get_apk_path() -> Path:
     if env_path:
         return _verify(Path(env_path))
 
-    # 2. Local scenario folder (dextrace_enforcements repo layout)
+    # 2. Local file in dextrace_enforcements root
     local = (
         Path(__file__).parents[4]
-        / "scenario_golddream"
-        / "golddream"
         / GOLDDREAM_APK_FILENAME
     )
     if local.exists():

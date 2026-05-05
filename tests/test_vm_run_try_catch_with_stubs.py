@@ -3,14 +3,14 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P5a × stub-throws cross-phase combo.
+Try/catch + stub-throws integration test.
 
 A custom stub raises `_ThrowSignal(IOException)` and the in-method catch
 block recovers it. Verifies the engine's `_invoke_stub` allowlist passes
 _ThrowSignal through instead of wrapping it as a generic stub-failed
 DexTraceVMError (in which case the in-method catch would never see it).
 
-Fixture: tests/fixtures/samples/p5a_x_stub.dex
+Fixture: tests/fixtures/samples/try_catch_with_stubs.dex
   Lp5x;->openCatch()I  (static)
     try   { Ldemo/Net;->openConnection(); return 0 }
     catch (Ljava/io/IOException;) { return 1 }
@@ -30,7 +30,7 @@ from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.signals import _ThrowSignal
 
 FIXTURE = (
-    Path(__file__).parent / "fixtures" / "samples" / "p5a_x_stub.dex"
+    Path(__file__).parent / "fixtures" / "samples" / "try_catch_with_stubs.dex"
 )
 ENTRY = "Lp5x;->openCatch()I"
 EXTERNAL_SIG = "Ldemo/Net;->openConnection()V"

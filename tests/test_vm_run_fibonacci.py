@@ -3,9 +3,9 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P2 VM execution integration test.
+Fibonacci VM execution integration test.
 
-Fixture: tests/fixtures/samples/p2_fib_recursive.dex
+Fixture: tests/fixtures/samples/fib_recursive.dex
   class Lp2/Fib; {
       public static int fib(int n) {
           if (n <= 1) return n;
@@ -13,8 +13,8 @@ Fixture: tests/fixtures/samples/p2_fib_recursive.dex
       }
   }
 
-One-liner verification (Phase 2):
-  python -m dextrace run tests/fixtures/samples/p2_fib_recursive.dex \
+One-liner verification:
+  python -m dextrace run tests/fixtures/samples/fib_recursive.dex \
       --entry 'Lp2/Fib;->fib(I)I' --arg 10 | grep 'return: 55'
 """
 
@@ -28,16 +28,16 @@ from unittest.mock import patch
 import pytest
 
 FIXTURE = (
-    Path(__file__).parent / "fixtures" / "samples" / "p2_fib_recursive.dex"
+    Path(__file__).parent / "fixtures" / "samples" / "fib_recursive.dex"
 )
 ENTRY = "Lp2/Fib;->fib(I)I"
 
 
 def test_fixture_exists():
-    assert FIXTURE.exists(), f"P2 fixture not found: {FIXTURE}"
+    assert FIXTURE.exists(), f"fixture not found: {FIXTURE}"
 
 
-class TestVMRunP2:
+class TestVMRunFibonacci:
     def test_python_api_base_cases(self):
         """fib(0) == 0, fib(1) == 1."""
         from dextrace.core.dex_resolver import DexResolver
@@ -81,7 +81,7 @@ class TestVMRunP2:
         assert vm.run(ENTRY, args=[10]) == 55
 
     def test_cli_text_output_fib10(self):
-        """dextrace run p2.dex --entry '...' --arg 10 prints 'return: 55'."""
+        """dextrace run fib_recursive.dex --entry '...' --arg 10 prints 'return: 55'."""
         from dextrace.cli.main import main
 
         buf = io.StringIO()
