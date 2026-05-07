@@ -98,7 +98,7 @@ The disassembly pipeline: `bytecode_source.py` → `operand_decoder.py` → `dis
 | DEX structure | `pytest tests/test_dex_parser.py tests/test_dex_header.py` |
 | API extraction | `pytest tests/test_dex_api_extractor.py` |
 | Dalvik / disassembly | `pytest -k disassembler` (or the full set in `docs/development-workflow.md`) |
-| VM / execution engine | `pytest tests/vm/ tests/test_vm_run_p5*.py tests/test_vm_run_p5a_x_p5d.py` |
+| VM / execution engine | `pytest tests/vm/ tests/test_vm_run_try_catch*.py tests/test_vm_run_long_arithmetic.py tests/test_vm_run_packed_switch.py tests/test_vm_run_instance_fields.py tests/test_vm_run_arrays.py tests/test_vm_run_interface_dispatch.py` |
 
 ## Commit style
 

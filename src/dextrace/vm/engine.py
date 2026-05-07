@@ -644,9 +644,16 @@ class DalvikVM:
             paren_pos = method_part.index("(")
             vname = method_part[:paren_pos]
             vproto = method_part[paren_pos:]
-            callee_code_off: Optional[int] = self._hierarchy.resolve_virtual(
-                runtime_desc, vname, vproto
-            )
+            try:
+                callee_code_off: Optional[int] = self._hierarchy.resolve_virtual(
+                    runtime_desc, vname, vproto
+                )
+            except DexTraceVMError:
+                # Method is not defined in the DEX class chain (inherited from
+                # Android SDK superclass). Treat it as an external API call —
+                # check the stub registry or apply the external-miss policy.
+                self._handle_external_miss(callee_sig, insn, state)
+                return None
             if self._trace_sink is not None:
                 resolved_sig = f"{runtime_desc}->{vname}{vproto}"
                 if resolved_sig != callee_sig:

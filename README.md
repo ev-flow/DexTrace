@@ -106,7 +106,7 @@ tests/
   test_*.py               # pytest-based test suite
 
 tools/
-  gen_p*.py               # DEX fixture generators for VM test samples
+  gen_*_fixture.py        # DEX fixture generators for VM test samples
 
 docs/
   modules-overview.md     # module-by-module handoff guide
@@ -392,7 +392,7 @@ pytest -k api_extractor
 * VM / execution engine changes:
 
   ```bash
-  pytest tests/vm/ tests/test_vm_run_p5*.py tests/test_vm_run_p5a_x_p5d.py
+  pytest tests/vm/ tests/test_vm_run_try_catch*.py tests/test_vm_run_long_arithmetic.py tests/test_vm_run_packed_switch.py tests/test_vm_run_instance_fields.py tests/test_vm_run_arrays.py tests/test_vm_run_interface_dispatch.py
   ```
 
 ---

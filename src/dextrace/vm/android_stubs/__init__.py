@@ -106,3 +106,6 @@ from dextrace.vm.android_stubs import text  # noqa: E402,F401
 from dextrace.vm.android_stubs import intent  # noqa: E402,F401
 from dextrace.vm.android_stubs import telephony  # noqa: E402,F401
 from dextrace.vm.android_stubs import network  # noqa: E402,F401
+from dextrace.vm.android_stubs import runtime  # noqa: E402,F401
+from dextrace.vm.android_stubs import filesystem  # noqa: E402,F401
+from dextrace.vm.android_stubs import content  # noqa: E402,F401
