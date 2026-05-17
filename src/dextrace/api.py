@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 from dataclasses import dataclass
 from os import PathLike
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 PathT = Union[str, PathLike]
@@ -370,3 +372,68 @@ def get_apk_permissions(apk_path: PathT) -> List[str]:
     if isinstance(perms, list):
         return [str(x) for x in perms]
     return []
+
+
+# ----------------------------
+# VM execution API
+# ----------------------------
+
+def execute_method(
+    apk_path: PathT,
+    entry_sig: str,
+    args: Optional[List] = None,
+    *,
+    timeout_s: float = 5.0,
+) -> Optional[Any]:
+    """
+    Execute a single Dalvik method in the DexTrace VM and return its return value.
+
+    Searches all DEX files inside the APK in stable order (classes.dex first),
+    runs the method in the first DEX that contains it, and returns the result.
+    Returns None if the method is not found, execution raises, or the timeout
+    fires.
+
+    :param apk_path: Path to the APK file.
+    :param entry_sig: Dalvik method signature, e.g.
+        'Lcom/example/Foo;->bar()Ljava/lang/String;'
+    :param args: Positional arguments to pass to the method (default: []).
+    :param timeout_s: Per-call wall-clock timeout in seconds (default: 5.0).
+    :return: The method's return value, or None on any failure.
+    """
+    if args is None:
+        args = []
+
+    resolved_path = str(Path(apk_path).resolve())
+
+    def _run() -> Optional[Any]:
+        from dextrace.core.apk_reader import ApkReader  # type: ignore
+        from dextrace.core.dex_parser import DexParser  # type: ignore
+        from dextrace.core.dex_resolver import DexResolver  # type: ignore
+        from dextrace.core.dex_code_map import build_sig_to_codeoff_map  # type: ignore
+        from dextrace.vm.engine import DalvikVM  # type: ignore
+
+        apk = ApkReader(resolved_path)
+        dex_names = [n for n in apk.list_entries() if isinstance(n, str) and n.endswith(".dex")]
+        dex_names.sort(key=lambda s: (s != "classes.dex", s))
+
+        for dex_name in dex_names:
+            try:
+                dex_bytes = apk.read_file(dex_name)
+                DexParser(dex_bytes)
+                resolver = DexResolver(dex_bytes)
+                sig_to_codeoff = build_sig_to_codeoff_map(dex_bytes, resolver)
+                if entry_sig not in sig_to_codeoff:
+                    continue
+                vm = DalvikVM(dex_bytes, resolver, sig_to_codeoff)
+                return vm.run(entry_sig, args)
+            except Exception:
+                continue
+
+        return None
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_run)
+            return future.result(timeout=timeout_s)
+    except (concurrent.futures.TimeoutError, Exception):
+        return None
