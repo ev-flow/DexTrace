@@ -300,6 +300,16 @@ class DalvikVM:
         if self._call_tree_trace:
             self._call_tree_trace.on_exit(result)
         self._final_state = state
+        # Resolve String heap handles to their Python str values so callers
+        # receive a plain string rather than an opaque integer handle.
+        if isinstance(result, int) and result > 0:
+            try:
+                if self._heap.get_class(result) == "Ljava/lang/String;":
+                    str_val = self._heap.get_value(result)
+                    if str_val is not None:
+                        result = str_val
+            except DexTraceVMError:
+                pass
         return result
 
     @property
