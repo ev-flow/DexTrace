@@ -107,7 +107,3 @@ venv.bak/
 
 # Generated DEX fixtures (run tools/gen_*_fixture.py to regenerate)
 tests/fixtures/samples/*.dex
-
-# Local planning / design docs
-DESIGN.md
-TODOS.md
