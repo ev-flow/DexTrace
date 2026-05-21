@@ -5,7 +5,7 @@
 """
 vm/handlers/type_check.py — check-cast, instance-of, monitor-enter, monitor-exit.
 
-P5c semantics (per Dalvik spec):
+Semantics:
 
   check-cast vAA, type@BBBB
     Null is always castable; a non-null receiver whose runtime class is not a
@@ -40,7 +40,7 @@ def register(
     hierarchy: ClassHierarchy,
     trace_sink: Optional[Callable[[str], None]] = None,
 ) -> None:
-    """Register P5c type-check + monitor handlers, capturing heap/hierarchy."""
+    """Register type-check + monitor handlers, capturing heap/hierarchy."""
 
     def handle_check_cast(insn: DecodedInsn, state: VMState) -> None:
         handle = state.registers.get(reg_index(insn.regs[0]))

@@ -6,7 +6,7 @@
 Long arithmetic integration test via the full VM.
 
 Fixture: tests/fixtures/samples/long_arith.dex
-  Lp5b;->longSum(I)J:
+  LLongArithmeticTest;->longSum(I)J:
       long a = (long) n;
       long b = a + a;          // 2n
       long c = b * 150L;       // 300n
@@ -25,7 +25,7 @@ from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
 FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "long_arith.dex"
-ENTRY = "Lp5b;->longSum(I)J"
+ENTRY = "LLongArithmeticTest;->longSum(I)J"
 
 
 @pytest.fixture(scope="module")

@@ -329,10 +329,10 @@ class TestBranchConditionals:
         branch.handle_goto_32(self._branch_insn([]), state)
         assert state.pc == self.TARGET
 
-    # P5c: packed-switch / sparse-switch are no longer eval-table handlers —
+    # packed-switch / sparse-switch are no longer eval-table handlers —
     # the engine dispatches them inline so it can reach the current frame's
     # raw insn bytes for payload decoding. Coverage moved to
-    # tests/test_vm_run_p5c.py and tests/vm/test_switch_payload.py.
+    # tests/test_vm_run_packed_switch.py and tests/vm/test_switch_payload.py.
 
 
 # ---------------------------------------------------------------------------
@@ -645,7 +645,7 @@ class TestStalePendingResultCleared:
         move-result. Verify that the engine clears it before the internal
         invoke stale guard runs (which would previously raise VMError).
         """
-        # Use the P1 fixture (simple const-return, no external calls needed)
+        # Use the simple fixture (simple const-return, no external calls needed)
         fixture = (
             Path(__file__).parent.parent
             / "fixtures"
@@ -661,5 +661,5 @@ class TestStalePendingResultCleared:
         # external stub result that was never consumed).
         # Then verify that run() still succeeds (it resets pending_result=None
         # at entry per OV-2).
-        result = vm.run("Lp1;->main()I", args=[])
+        result = vm.run("LConstReturnTest;->main()I", args=[])
         assert result == 42

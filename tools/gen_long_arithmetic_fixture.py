@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
+# pylint: disable=duplicate-code  # fixture scripts share DEX builder boilerplate intentionally
 """
 Build tests/fixtures/samples/long_arith.dex programmatically.
 
 Method:
-  Lp5b;->longSum(I)J  (static)
+  LLongArithmeticTest;->longSum(I)J  (static)
     long a = (long) n;
     long b = a + a;        // 2n
     long c = b * 150L;     // 300n
@@ -14,7 +14,7 @@ Method:
 
 Verification:
   dextrace run tests/fixtures/samples/long_arith.dex \\
-      --entry 'Lp5b;->longSum(I)J' --arg 100
+      --entry 'LLongArithmeticTest;->longSum(I)J' --arg 100
   # -> return: 30000
 """
 
@@ -53,12 +53,12 @@ def build_long_arithmetic_dex() -> bytes:  # pylint: disable=too-many-locals,too
         "J",                  # 1
         "JI",                 # 2 — shorty for (I)J
         "Ljava/lang/Object;", # 3
-        "Lp5b;",              # 4
+        "LLongArithmeticTest;",              # 4
         "longSum",            # 5
     ]
-    type_string_ids = [0, 1, 3, 4]  # type 0=I, 1=J, 2=Object, 3=Lp5b;
+    type_string_ids = [0, 1, 3, 4]  # type 0=I, 1=J, 2=Object, 3=LLongArithmeticTest;
     protos = [(2, 1)]  # proto 0: shorty=str2 "JI", return=type1 "J", params=type_list_for_I
-    method_ids = [(3, 0, 5)]  # Lp5b;->longSum(I)J: class=type3, proto=0, name=str5
+    method_ids = [(3, 0, 5)]  # LLongArithmeticTest;->longSum(I)J: class=type3, proto=0, name=str5
 
     # Insns (8 code units):
     #   pc=0  int-to-long v0, v7        (op 0x81, fmt 12x)

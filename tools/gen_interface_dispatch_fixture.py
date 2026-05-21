@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
+# pylint: disable=duplicate-code  # fixture scripts share DEX builder boilerplate intentionally
 """
 Build tests/fixtures/samples/interface_dispatch.dex programmatically.
 
 Class layout:
-  Lp5f;
+  LInterfaceDispatchTest;
     direct  static callIFace()I    — entry point
     virtual         value()I       — returns 7
 
 Method:
-  Lp5f;->callIFace()I  (static)
+  LInterfaceDispatchTest;->callIFace()I  (static)
     Lp5f obj = new Lp5f();
     return obj.value();             // invoke-interface dispatch on runtime class
   -> 7
@@ -24,7 +24,7 @@ Why this exercises invoke-interface:
 
 Verification:
   dextrace run tests/fixtures/samples/interface_dispatch.dex \\
-      --entry 'Lp5f;->callIFace()I'
+      --entry 'LInterfaceDispatchTest;->callIFace()I'
   # → return: 7
 """
 
@@ -58,24 +58,24 @@ def build_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
     strings = [
         "I",                   # 0  (also serves as shorty for ()I)
         "Ljava/lang/Object;",  # 1
-        "Lp5f;",               # 2
+        "LInterfaceDispatchTest;",               # 2
         "callIFace",           # 3
         "value",               # 4
     ]
     # type_string_ids[i] = string_idx for type i.
-    type_string_ids = [0, 1, 2]  # 0=I, 1=Object, 2=Lp5f;
+    type_string_ids = [0, 1, 2]  # 0=I, 1=Object, 2=LInterfaceDispatchTest;
     protos = [(0, 0)]  # proto 0: shorty=str0 "I", return=type0 I, no params
 
     # Method IDs sorted by (class_idx, name_idx, proto_idx).
-    # Both belong to Lp5f; (cls 2). "callIFace" (str3) < "value" (str4).
+    # Both belong to LInterfaceDispatchTest; (cls 2). "callIFace" (str3) < "value" (str4).
     method_ids = [
-        (2, 0, 3),  # method 0: Lp5f;->callIFace()I
-        (2, 0, 4),  # method 1: Lp5f;->value()I
+        (2, 0, 3),  # method 0: LInterfaceDispatchTest;->callIFace()I
+        (2, 0, 4),  # method 1: LInterfaceDispatchTest;->value()I
     ]
 
     # ------------------------------------------------------------------
     # callIFace insns (7 code units)
-    #   pc=0   new-instance v0, type@2 (Lp5f;)             21c, 2u
+    #   pc=0   new-instance v0, type@2 (LInterfaceDispatchTest;)             21c, 2u
     #   pc=2   invoke-interface {v0}, method@1 (value()I)  35c, 3u
     #   pc=5   move-result v1                              11x, 1u
     #   pc=6   return v1                                   11x, 1u

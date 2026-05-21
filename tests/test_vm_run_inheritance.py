@@ -6,13 +6,13 @@
 Inheritance VM execution integration test — Method Dispatch (invoke-virtual vtable).
 
 Fixture: tests/fixtures/samples/inheritance.dex
-  class Lp3/Base; {
+  class LBase; {
       public int foo() { return 1; }
   }
-  class Lp3/Mid; extends Lp3/Base; {
+  class LMid; extends LBase; {
       public int foo() { return 2; }   // overrides Base.foo
   }
-  class Lp3/Main; {
+  class LMain; {
       public static int entry() {
           Lp3/Mid obj = new Lp3/Mid();
           return obj.foo();             // vtable dispatch → Mid.foo → 2
@@ -29,7 +29,7 @@ from dextrace.vm.engine import DalvikVM
 dex = Path('tests/fixtures/samples/inheritance.dex').read_bytes()
 resolver = DexResolver(dex); sig_map = build_sig_to_codeoff_map(dex, resolver)
 vm = DalvikVM(dex, resolver, sig_map)
-assert vm.run('Lp3/Main;->entry()I') == 2
+assert vm.run('LMain;->entry()I') == 2
 print('OK: return 2')
 "
 """
@@ -49,7 +49,7 @@ from dextrace.vm.engine import DalvikVM
 from dextrace.vm.errors import DexTraceNotImplementedError, DexTraceVMError
 
 FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "inheritance.dex"
-ENTRY = "Lp3/Main;->entry()I"
+ENTRY = "LMain;->entry()I"
 
 
 def test_fixture_exists():
@@ -76,11 +76,11 @@ class TestVMRunInheritance:
 
     def test_base_foo_returns_1(self, vm):
         """Base.foo() still returns 1 directly."""
-        assert vm.run("Lp3/Base;->foo()I") == 1
+        assert vm.run("LBase;->foo()I") == 1
 
     def test_mid_foo_returns_2(self, vm):
         """Mid.foo() returns 2 directly."""
-        assert vm.run("Lp3/Mid;->foo()I") == 2
+        assert vm.run("LMid;->foo()I") == 2
 
     def test_invoke_interface_raises(self, vm):
         """invoke-interface surfaces as DexTraceNotImplementedError (not a crash)."""
@@ -93,14 +93,14 @@ class TestVMRunInheritance:
 
 class TestVerboseTraceSink:
     def test_new_instance_trace(self):
-        """trace_sink receives 'new-instance: Lp3/Mid; → handle #1' during entry()."""
+        """trace_sink receives 'new-instance: LMid; → handle #1' during entry()."""
         dex = FIXTURE.read_bytes()
         resolver = DexResolver(dex)
         sig_map = build_sig_to_codeoff_map(dex, resolver)
         messages = []
         vm = DalvikVM(dex, resolver, sig_map, trace_sink=messages.append)
         vm.run(ENTRY)
-        assert any(m.startswith("new-instance: Lp3/Mid;") for m in messages)
+        assert any(m.startswith("new-instance: LMid;") for m in messages)
 
     def test_invoke_virtual_dispatch_trace(self):
         """trace_sink receives invoke-virtual resolution: Base.foo → Mid.foo."""
@@ -112,8 +112,8 @@ class TestVerboseTraceSink:
         vm.run(ENTRY)
         assert any(
             "invoke-virtual:" in m
-            and "Lp3/Base;->foo()I" in m
-            and "Lp3/Mid;->foo()I" in m
+            and "LBase;->foo()I" in m
+            and "LMid;->foo()I" in m
             for m in messages
         )
 
@@ -139,7 +139,7 @@ class TestRegressionConstReturnFib:
         resolver = DexResolver(dex)
         sig_map = build_sig_to_codeoff_map(dex, resolver)
         vm = DalvikVM(dex, resolver, sig_map)
-        result = vm.run("Lp1;->main()I")
+        result = vm.run("LConstReturnTest;->main()I")
         assert result == 42
 
     def test_fibonacci_still_passes(self):
@@ -152,4 +152,4 @@ class TestRegressionConstReturnFib:
         resolver = DexResolver(dex)
         sig_map = build_sig_to_codeoff_map(dex, resolver)
         vm = DalvikVM(dex, resolver, sig_map)
-        assert vm.run("Lp2/Fib;->fib(I)I", [10]) == 55
+        assert vm.run("LFibonacciTest;->fib(I)I", [10]) == 55

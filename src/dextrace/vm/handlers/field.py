@@ -3,7 +3,7 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-vm/handlers/field.py — Instance and static field access (P5d).
+vm/handlers/field.py — Instance and static field access.
 
 Covers all 28 field opcodes:
   iget / iget-wide / iget-object / iget-{boolean,byte,char,short}
@@ -23,7 +23,7 @@ clears it at run() entry so consecutive runs see isolated state.
 
 Null receiver semantics:
   iget*/iput* on a null receiver (handle == 0) raise _ThrowSignal
-  with NullPointerException so an in-method catch can handle it (P5a×P5d).
+  with NullPointerException so an in-method catch can handle it.
   Mirrors the JVM behavior monitor-* already uses in type_check.py.
 
 The 7 typed primitive widths (boolean/byte/char/short) do not mask on

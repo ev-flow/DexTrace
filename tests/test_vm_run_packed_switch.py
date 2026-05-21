@@ -6,7 +6,7 @@
 Packed-switch dispatch integration test via the full VM.
 
 Fixture: tests/fixtures/samples/packed_switch.dex
-  Lp5c;->switchCast(I)I:
+  LPackedSwitchTest;->switchCast(I)I:
     switch (n) {
       case 0: return 100;
       case 1: return 150;
@@ -27,7 +27,7 @@ from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
 FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "packed_switch.dex"
-ENTRY = "Lp5c;->switchCast(I)I"
+ENTRY = "LPackedSwitchTest;->switchCast(I)I"
 
 
 @pytest.fixture(scope="module")

@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
+# pylint: disable=duplicate-code  # fixture scripts share DEX builder boilerplate intentionally
 """
 Build tests/fixtures/samples/instance_fields.dex programmatically.
 
 Method:
-  Lp5d;->fieldRoundtrip(I)I  (static)
+  LInstanceFieldsTest;->fieldRoundtrip(I)I  (static)
     Box box = new Box();    // new-instance, no <init> — iget defaults to 0
-    box.n = arg;            // iput v9, v0, Lp5d;->n:I
-    int t = box.n;          // iget v1, v0, Lp5d;->n:I
+    box.n = arg;            // iput v9, v0, LInstanceFieldsTest;->n:I
+    int t = box.n;          // iget v1, v0, LInstanceFieldsTest;->n:I
     t = t * 2;              // mul-int/lit8 v1, v1, #2
-    Lp5d.total = t;         // sput v1, Lp5d;->total:I
-    return Lp5d.total;      // sget v2, Lp5d;->total:I; return v2
+    Lp5d.total = t;         // sput v1, LInstanceFieldsTest;->total:I
+    return Lp5d.total;      // sget v2, LInstanceFieldsTest;->total:I; return v2
   -> 21 -> 42
 
 Verification:
   dextrace run tests/fixtures/samples/instance_fields.dex \\
-      --entry 'Lp5d;->fieldRoundtrip(I)I' --arg 21
+      --entry 'LInstanceFieldsTest;->fieldRoundtrip(I)I' --arg 21
   # -> return: 42
 """
 
@@ -50,31 +50,31 @@ def build_instance_fields_dex() -> bytes:  # pylint: disable=too-many-locals,too
         "I",                   # 0
         "II",                  # 1 — shorty for (I)I
         "Ljava/lang/Object;",  # 2
-        "Lp5d;",               # 3
+        "LInstanceFieldsTest;",               # 3
         "fieldRoundtrip",      # 4
         "n",                   # 5
         "total",               # 6
     ]
     # type_string_ids[i] = string_idx of the i-th type descriptor.
     # Order matters: indexes here are referenced by everything downstream.
-    type_string_ids = [0, 2, 3]  # type 0=I, 1=Object, 2=Lp5d;
+    type_string_ids = [0, 2, 3]  # type 0=I, 1=Object, 2=LInstanceFieldsTest;
     protos = [(1, 0)]  # proto 0: shorty=str1 "II", return=type0 "I"
 
     # Field IDs must be sorted by (class_idx, name_idx, type_idx).
-    # Both fields belong to Lp5d; (type 2). "n" (str5) < "total" (str6).
+    # Both fields belong to LInstanceFieldsTest; (type 2). "n" (str5) < "total" (str6).
     field_ids = [
-        (2, 0, 5),  # field 0: Lp5d;->n:I
-        (2, 0, 6),  # field 1: Lp5d;->total:I
+        (2, 0, 5),  # field 0: LInstanceFieldsTest;->n:I
+        (2, 0, 6),  # field 1: LInstanceFieldsTest;->total:I
     ]
 
-    method_ids = [(2, 0, 4)]  # Lp5d;->fieldRoundtrip(I)I: cls=type2, proto=0, name=str4
+    method_ids = [(2, 0, 4)]  # LInstanceFieldsTest;->fieldRoundtrip(I)I: cls=type2, proto=0, name=str4
 
     # Insns (13 code units):
-    #   pc=0   new-instance v0, type@2 (Lp5d;)         (21c, op 0x22, 2 units)
-    #   pc=2   iput v9, v0, field@0 (Lp5d;->n:I)        (22c, op 0x59, 2 units)
+    #   pc=0   new-instance v0, type@2 (LInstanceFieldsTest;)         (21c, op 0x22, 2 units)
+    #   pc=2   iput v9, v0, field@0 (LInstanceFieldsTest;->n:I)        (22c, op 0x59, 2 units)
     #   pc=4   iget v1, v0, field@0                     (22c, op 0x52, 2 units)
     #   pc=6   mul-int/lit8 v1, v1, #2                  (22b, op 0xda, 2 units)
-    #   pc=8   sput v1, field@1 (Lp5d;->total:I)        (21c, op 0x67, 2 units)
+    #   pc=8   sput v1, field@1 (LInstanceFieldsTest;->total:I)        (21c, op 0x67, 2 units)
     #   pc=10  sget v2, field@1                         (21c, op 0x60, 2 units)
     #   pc=12  return v2                                (11x, op 0x0f, 1 unit)
     #
@@ -206,10 +206,10 @@ def build_instance_fields_dex() -> bytes:  # pylint: disable=too-many-locals,too
         struct.pack("<HHI", cls_idx, proto_idx, name_idx)
         for cls_idx, proto_idx, name_idx in method_ids
     )
-    # class_def_item: 8 u4 fields. class_idx=2 (Lp5d;), super=type1 (Object).
+    # class_def_item: 8 u4 fields. class_idx=2 (LInstanceFieldsTest;), super=type1 (Object).
     class_def_items = struct.pack(
         "<IIIIIIII",
-        2,            # class_idx: Lp5d;
+        2,            # class_idx: LInstanceFieldsTest;
         ACC_PUBLIC,   # access_flags
         1,            # superclass_idx: Object
         0,            # interfaces_off

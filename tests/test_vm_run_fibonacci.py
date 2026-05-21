@@ -6,7 +6,7 @@
 Fibonacci VM execution integration test.
 
 Fixture: tests/fixtures/samples/fib_recursive.dex
-  class Lp2/Fib; {
+  class LFibonacciTest; {
       public static int fib(int n) {
           if (n <= 1) return n;
           return fib(n-1) + fib(n-2);
@@ -15,7 +15,7 @@ Fixture: tests/fixtures/samples/fib_recursive.dex
 
 One-liner verification:
   python -m dextrace run tests/fixtures/samples/fib_recursive.dex \
-      --entry 'Lp2/Fib;->fib(I)I' --arg 10 | grep 'return: 55'
+      --entry 'LFibonacciTest;->fib(I)I' --arg 10 | grep 'return: 55'
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ import pytest
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "samples" / "fib_recursive.dex"
 )
-ENTRY = "Lp2/Fib;->fib(I)I"
+ENTRY = "LFibonacciTest;->fib(I)I"
 
 
 def test_fixture_exists():

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
+# pylint: disable=duplicate-code  # fixture scripts share DEX builder boilerplate intentionally
 """
 Build tests/fixtures/samples/try_catch_npe_with_fields.dex programmatically.
 
-Cross-phase combo: P5d's null-receiver iget-object throws NPE, P5a's catch
+Combo: null-receiver iget-object throws NPE, the catch
 walker resolves it via the seeded Java exception hierarchy, and the in-method
 catch handler returns the sentinel 99.
 
 Method:
-  Lp5ad;->igetNpe()I  (static, no args)
+  LTryCatchFieldsTest;->igetNpe()I  (static, no args)
     Object o = null;
     try {
       return o.ref;          // iget-object on null → NPE
@@ -19,7 +19,7 @@ Method:
 
 Verification:
   python -m dextrace run tests/fixtures/samples/try_catch_npe_with_fields.dex \\
-      --entry 'Lp5ad;->igetNpe()I'
+      --entry 'LTryCatchFieldsTest;->igetNpe()I'
   # → return: 99
 """
 
@@ -68,20 +68,20 @@ def build_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
         "I",                                # 0  (also serves as shorty for ()I)
         "Ljava/lang/NullPointerException;", # 1
         "Ljava/lang/Object;",               # 2
-        "Lp5ad;",                           # 3
+        "LTryCatchFieldsTest;",                           # 3
         "igetNpe",                          # 4
         "ref",                              # 5
     ]
     # Types (sorted by string_idx).
-    type_string_ids = [0, 1, 2, 3]  # 0=I, 1=NPE, 2=Object, 3=Lp5ad;
+    type_string_ids = [0, 1, 2, 3]  # 0=I, 1=NPE, 2=Object, 3=LTryCatchFieldsTest;
     protos = [(0, 0)]               # proto 0: shorty=str0 "I", return=type0 "I", no params
 
     # Field IDs.
     field_ids = [
-        (3, 2, 5),  # field 0: Lp5ad;->ref:Ljava/lang/Object;
+        (3, 2, 5),  # field 0: LTryCatchFieldsTest;->ref:Ljava/lang/Object;
     ]
 
-    method_ids = [(3, 0, 4)]        # Lp5ad;->igetNpe()I
+    method_ids = [(3, 0, 4)]        # LTryCatchFieldsTest;->igetNpe()I
 
     # Insns (10 code units — even, no pad before tries):
     #   pc=0  const/4 v0, #0                       (op 0x12, 11n,  1 unit)
@@ -214,7 +214,7 @@ def build_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
     )
     class_def_items = struct.pack(
         "<IIIIIIII",
-        3,            # class_idx: Lp5ad;
+        3,            # class_idx: LTryCatchFieldsTest;
         ACC_PUBLIC,
         2,            # super: Object
         0,

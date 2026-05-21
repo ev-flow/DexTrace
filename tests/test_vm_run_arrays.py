@@ -6,7 +6,7 @@
 Array round-trip integration test via the full VM.
 
 Fixture: tests/fixtures/samples/arrays.dex
-  Lp5e;->arraySum()I:
+  LArraysTest;->arraySum()I:
       int[] arr = new int[3];               // new-array
       fill-array-data arr, [10, 20, 30];     // fill-array-data
       int n = arr.length;                    // array-length
@@ -27,7 +27,7 @@ from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
 FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "arrays.dex"
-ENTRY = "Lp5e;->arraySum()I"
+ENTRY = "LArraysTest;->arraySum()I"
 
 
 @pytest.fixture(scope="module")

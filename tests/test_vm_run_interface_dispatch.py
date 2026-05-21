@@ -6,7 +6,7 @@
 Interface dispatch integration test — invoke-interface routes through runtime vtable.
 
 Fixture: tests/fixtures/samples/interface_dispatch.dex
-  Lp5f;->callIFace()I:
+  LInterfaceDispatchTest;->callIFace()I:
       Lp5f obj = new Lp5f();
       return obj.value();           // invoke-interface dispatch on runtime class
   -> 7
@@ -27,7 +27,7 @@ from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
 FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "interface_dispatch.dex"
-ENTRY = "Lp5f;->callIFace()I"
+ENTRY = "LInterfaceDispatchTest;->callIFace()I"
 
 
 @pytest.fixture(scope="module")

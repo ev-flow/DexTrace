@@ -3,7 +3,7 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P5b unit tests for long / float / double arithmetic handlers.
+Unit tests for long / float / double arithmetic handlers.
 
 Each test pokes registers manually, dispatches via the eval table, and
 verifies the result. Float/double values use IEEE 754 bit patterns in

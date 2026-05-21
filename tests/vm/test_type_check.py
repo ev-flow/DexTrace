@@ -3,11 +3,11 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P5c unit tests for check-cast / instance-of / monitor-enter / monitor-exit.
+Unit tests for check-cast / instance-of / monitor-enter / monitor-exit.
 
 We construct DecodedInsns by hand, register the handlers against an empty
 eval table, and verify register state and exception signaling. The
-ClassHierarchy is built from the P5c fixture; only its built-in Java seed
+ClassHierarchy is built from the fixture; only its built-in Java seed
 matters for these tests.
 """
 

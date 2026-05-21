@@ -6,7 +6,7 @@
 Try/catch integration test — try / catch / throw / move-exception.
 
 Fixture: tests/fixtures/samples/try_catch.dex
-  class Lp5a; {
+  class LTryCatchTest; {
       public static int divCatch(int a, int b) {
           try {
               return a / b;
@@ -18,7 +18,7 @@ Fixture: tests/fixtures/samples/try_catch.dex
 
 One-liner verification:
   dextrace run tests/fixtures/samples/try_catch.dex \\
-      --entry 'Lp5a;->divCatch(II)I' --arg 10 --arg 0
+      --entry 'LTryCatchTest;->divCatch(II)I' --arg 10 --arg 0
   # → return: -1
 """
 
@@ -33,7 +33,7 @@ from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
 FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "try_catch.dex"
-ENTRY = "Lp5a;->divCatch(II)I"
+ENTRY = "LTryCatchTest;->divCatch(II)I"
 
 
 def test_fixture_exists():

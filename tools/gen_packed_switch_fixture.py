@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
+# pylint: disable=duplicate-code  # fixture scripts share DEX builder boilerplate intentionally
 """
 Build tests/fixtures/samples/packed_switch.dex programmatically.
 
 Method:
-  Lp5c;->switchCast(I)I  (static)
+  LPackedSwitchTest;->switchCast(I)I  (static)
     switch (n) {
       case 0: return 100;
       case 1: return 150;
@@ -16,7 +16,7 @@ Method:
 
 Verification:
   dextrace run tests/fixtures/samples/packed_switch.dex \\
-      --entry 'Lp5c;->switchCast(I)I' --arg 2
+      --entry 'LPackedSwitchTest;->switchCast(I)I' --arg 2
   # -> return: 200
 """
 
@@ -54,12 +54,12 @@ def build_packed_switch_dex() -> bytes:  # pylint: disable=too-many-locals,too-m
         "I",                  # 0
         "II",                 # 1 — shorty for (I)I
         "Ljava/lang/Object;", # 2
-        "Lp5c;",              # 3
+        "LPackedSwitchTest;",              # 3
         "switchCast",         # 4
     ]
-    type_string_ids = [0, 2, 3]  # type 0=I, 1=Object, 2=Lp5c;
+    type_string_ids = [0, 2, 3]  # type 0=I, 1=Object, 2=LPackedSwitchTest;
     protos = [(1, 0)]  # proto 0: shorty=str1 "II", return=type0 "I"
-    method_ids = [(2, 0, 4)]  # Lp5c;->switchCast(I)I
+    method_ids = [(2, 0, 4)]  # LPackedSwitchTest;->switchCast(I)I
 
     # Insns (30 code units total):
     #

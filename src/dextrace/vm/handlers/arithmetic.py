@@ -31,7 +31,7 @@ from dextrace.vm.int_ops import (
 from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.state import VMState
 
-# P5a: integer div/rem by zero must surface as a Java-faithful
+# integer div/rem by zero must surface as a Java-faithful
 # ArithmeticException so user-code `try/catch (ArithmeticException)` blocks
 # fire correctly. Raise via _ThrowSignal so the engine walks the catch table
 # instead of producing a top-level VM error.
@@ -382,7 +382,7 @@ def handle_not_int(insn: DecodedInsn, state: VMState) -> None:
 
 
 # ===========================================================================
-# P5b: Wide arithmetic (long / float / double)
+# Wide arithmetic (long / float / double)
 # ===========================================================================
 #
 # Long values occupy a vN:vN+1 register pair via get_wide / set_wide.
@@ -597,7 +597,7 @@ def register(eval_table: dict) -> None:
     for name, fn in pairs:
         eval_table[name] = fn
 
-    # ---- P5b: long binary (closures over op functions) --------------------
+    # ---- long binary (closures over op functions) --------------------
     long_binary = [
         ("add-long", operator.add),
         ("sub-long", operator.sub),
@@ -634,7 +634,7 @@ def register(eval_table: dict) -> None:
     eval_table["neg-long"] = handle_neg_long
     eval_table["not-long"] = handle_not_long
 
-    # ---- P5b: float binary -------------------------------------------------
+    # ---- float binary -------------------------------------------------
     # Float div/rem do NOT raise — IEEE 754 returns Inf/NaN.
     float_binary = [
         ("add-float", operator.add),
@@ -650,7 +650,7 @@ def register(eval_table: dict) -> None:
         )
     eval_table["neg-float"] = handle_neg_float
 
-    # ---- P5b: double binary ------------------------------------------------
+    # ---- double binary ------------------------------------------------
     double_binary = [
         ("add-double", operator.add),
         ("sub-double", operator.sub),

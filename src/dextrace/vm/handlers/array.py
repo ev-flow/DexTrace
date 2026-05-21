@@ -3,7 +3,7 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-vm/handlers/array.py — Array operations (P5e).
+vm/handlers/array.py — Array operations.
 
 Covers all 19 array opcodes:
   new-array, array-length
@@ -19,7 +19,7 @@ Heap model:
   and signal-raising live here in the handler so heap.py stays unaware of
   vm.signals (and the import graph stays acyclic).
 
-Exception semantics (composes with P5a catch walker):
+Exception semantics:
   - null array on array-length / aget*/aput* → NullPointerException
   - negative length on new-array            → NegativeArraySizeException
   - index < 0 or >= length on aget*/aput*   → ArrayIndexOutOfBoundsException
@@ -31,7 +31,7 @@ filled-new-array / filled-new-array-range:
 
 fill-array-data is registered by the engine (not here) because it needs
 raw access to the code-unit bytes via the parser; the handler module does
-not see code_off. This matches the packed/sparse-switch split in P5c.
+not see code_off. This matches the packed/sparse-switch split.
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def _check_index(arr: list, idx: int) -> None:
 
 
 def register(eval_table: dict, heap: ObjectHeap) -> None:
-    """Register P5e array handlers, capturing the heap reference."""
+    """Register array handlers, capturing the heap reference."""
 
     # ------------------------------------------------------------------
     # Allocation

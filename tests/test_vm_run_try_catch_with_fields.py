@@ -8,7 +8,7 @@ the catch walker resolves it via the seeded Java exception hierarchy,
 and the in-method handler returns the sentinel.
 
 Fixture: tests/fixtures/samples/try_catch_npe_with_fields.dex
-  Lp5ad;->igetNpe()I:
+  LTryCatchFieldsTest;->igetNpe()I:
       Object o = null;
       try   { return o.ref; }                    // iget-object on null
       catch (NullPointerException) { return 99; }
@@ -26,7 +26,7 @@ from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
 FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "try_catch_npe_with_fields.dex"
-ENTRY = "Lp5ad;->igetNpe()I"
+ENTRY = "LTryCatchFieldsTest;->igetNpe()I"
 
 
 @pytest.fixture(scope="module")

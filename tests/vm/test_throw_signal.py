@@ -4,7 +4,7 @@
 
 """
 Unit tests for _ThrowSignal and the engine's catch-walk + multi-frame unwind.
-Driven by the P5a fixture so the engine doesn't get mocked away — we want to
+Driven by the try-catch fixture so the engine doesn't get mocked away — we want to
 exercise the real `_execute` loop end-to-end with constructed throw scenarios.
 """
 
@@ -48,7 +48,7 @@ class TestCatchTableMatching:
 
     def test_arithmetic_exception_matches_handler(self, vm):
         # b=0 → div-int raises _ThrowSignal(ArithmeticException) → catch fires
-        assert vm.run("Lp5a;->divCatch(II)I", [99, 0]) == -1
+        assert vm.run("LTryCatchTest;->divCatch(II)I", [99, 0]) == -1
 
     def test_no_throw_means_no_pending_exception(self, vm):
         # Verify isolation: after a clean run, the engine's heap should be
@@ -56,7 +56,7 @@ class TestCatchTableMatching:
         # directly without crossing public API, but if it leaked the next
         # divCatch(10,0) catch path would behave inconsistently. Run twice.
         for _ in range(3):
-            assert vm.run("Lp5a;->divCatch(II)I", [50, 5]) == 10
+            assert vm.run("LTryCatchTest;->divCatch(II)I", [50, 5]) == 10
 
 
 class TestUncaughtPropagation:
@@ -70,4 +70,4 @@ class TestUncaughtPropagation:
             vm._hierarchy, "is_subtype", lambda child, parent: False
         )
         with pytest.raises(DexTraceVMError, match="uncaught"):
-            vm.run("Lp5a;->divCatch(II)I", [10, 0])
+            vm.run("LTryCatchTest;->divCatch(II)I", [10, 0])

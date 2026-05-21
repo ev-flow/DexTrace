@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=duplicate-code  # gen_pNN scripts share DEX builder boilerplate intentionally
+# pylint: disable=duplicate-code  # fixture scripts share DEX builder boilerplate intentionally
 """
 Build tests/fixtures/samples/arrays.dex programmatically.
 
 Method:
-  Lp5e;->arraySum()I  (static, no args)
+  LArraysTest;->arraySum()I  (static, no args)
     int[] arr = new int[3];     // new-array
     fill-array-data arr, [10,20,30]
     int n = arr.length;         // array-length
@@ -16,7 +16,7 @@ Method:
 
 Verification:
   python -m dextrace run tests/fixtures/samples/arrays.dex \\
-      --entry 'Lp5e;->arraySum()I'
+      --entry 'LArraysTest;->arraySum()I'
   # → return: 60
 """
 
@@ -49,14 +49,14 @@ def build_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-statements
     strings = [
         "I",                  # 0  (also serves as shorty for ()I)
         "Ljava/lang/Object;", # 1
-        "Lp5e;",              # 2
+        "LArraysTest;",              # 2
         "[I",                 # 3  (array descriptor for int[])
         "arraySum",           # 4
     ]
     # type_string_ids[i] = string_idx for type i, sorted by string_idx.
-    type_string_ids = [0, 1, 2, 3]  # 0=I, 1=Object, 2=Lp5e;, 3=[I
+    type_string_ids = [0, 1, 2, 3]  # 0=I, 1=Object, 2=LArraysTest;, 3=[I
     protos = [(0, 0)]               # proto 0: shorty=str0 "I", return=type0 "I", no params
-    method_ids = [(2, 0, 4)]        # Lp5e;->arraySum()I
+    method_ids = [(2, 0, 4)]        # LArraysTest;->arraySum()I
 
     # Insns layout (30 code units; 4-byte aligned for the payload):
     #   pc=0   const/4 v0, #3                          11n  1u
