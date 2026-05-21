@@ -10,6 +10,7 @@ from dextrace.version import __version__
 from dextrace.cli import cmd_meta
 from dextrace.cli import cmd_dex
 from dextrace.cli import cmd_disasm
+from dextrace.cli import cmd_run
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -55,6 +56,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disassemble specified methods and output JSON for Quark stage-5.",
     )
     cmd_disasm.register(p_disasm)
+
+    # -------------------------
+    # run subcommand
+    # -------------------------
+    p_run = subparsers.add_parser(
+        "run",
+        help="Execute a method in the Dalvik VM interpreter",
+    )
+    cmd_run.register(p_run)
 
     return parser
 
