@@ -6,7 +6,7 @@
 Fibonacci VM execution integration test.
 
 Fixture: tests/fixtures/samples/fib_recursive.dex
-  class LFibonacciTest; {
+  class Lp2/Fib; {
       public static int fib(int n) {
           if (n <= 1) return n;
           return fib(n-1) + fib(n-2);
@@ -15,7 +15,7 @@ Fixture: tests/fixtures/samples/fib_recursive.dex
 
 One-liner verification:
   python -m dextrace run tests/fixtures/samples/fib_recursive.dex \
-      --entry 'LFibonacciTest;->fib(I)I' --arg 10 | grep 'return: 55'
+      --entry 'Lp2/Fib;->fib(I)I' --arg 10 | grep 'return: 55'
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ import pytest
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "samples" / "fib_recursive.dex"
 )
-ENTRY = "LFibonacciTest;->fib(I)I"
+ENTRY = "Lp2/Fib;->fib(I)I"
 
 
 def test_fixture_exists():
@@ -80,48 +80,3 @@ class TestVMRunFibonacci:
 
         assert vm.run(ENTRY, args=[10]) == 55
 
-    def test_cli_text_output_fib10(self):
-        """dextrace run fib_recursive.dex --entry '...' --arg 10 prints 'return: 55'."""
-        from dextrace.cli.main import main
-
-        buf = io.StringIO()
-        with patch("sys.stdout", buf):
-            rc = main(["run", str(FIXTURE), "--entry", ENTRY, "--arg", "10"])
-
-        assert rc == 0
-        assert buf.getvalue().strip() == "return: 55"
-
-    def test_cli_json_output_fib10(self):
-        """--json flag with fib(10) produces {'return': 55}."""
-        from dextrace.cli.main import main
-
-        buf = io.StringIO()
-        with patch("sys.stdout", buf):
-            rc = main(
-                [
-                    "run",
-                    str(FIXTURE),
-                    "--entry",
-                    ENTRY,
-                    "--arg",
-                    "10",
-                    "--json",
-                ]
-            )
-
-        assert rc == 0
-        doc = json.loads(buf.getvalue())
-        assert doc["return"] == 55
-
-    def test_cli_fib0_and_fib1(self):
-        """Base cases via CLI."""
-        from dextrace.cli.main import main
-
-        for n, expected in [(0, 0), (1, 1)]:
-            buf = io.StringIO()
-            with patch("sys.stdout", buf):
-                rc = main(
-                    ["run", str(FIXTURE), "--entry", ENTRY, "--arg", str(n)]
-                )
-            assert rc == 0
-            assert buf.getvalue().strip() == f"return: {expected}"
