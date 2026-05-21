@@ -42,8 +42,6 @@ def register(p: argparse.ArgumentParser) -> None:
         metavar="SIG",
         help="Entry method signature, e.g. 'Lp1;->main()I'",
     )
-    # P4: --arg auto-detects int (decimal/0x hex) vs string. Repeat for
-    # multiple positional args. Mutually exclusive with --args.
     p.add_argument(
         "--arg",
         "-a",
@@ -249,7 +247,7 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
 
 
 # ---------------------------------------------------------------------------
-# Output formatters (Terminal Noir, per DESIGN.md)
+# Output formatters
 # ---------------------------------------------------------------------------
 
 
@@ -351,7 +349,7 @@ def _print_registers(rf) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Message helpers (stderr only, 7-char fixed-width prefix per DESIGN.md)
+# Message helpers
 # ---------------------------------------------------------------------------
 
 
