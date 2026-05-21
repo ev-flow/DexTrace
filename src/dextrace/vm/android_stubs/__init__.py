@@ -91,14 +91,3 @@ REGISTRY: Dict[str, StubCallable] = {}
 def register(signature: str, fn: StubCallable) -> None:
     """Register a stub for a method signature. Last writer wins."""
     REGISTRY[signature] = fn
-
-
-# ---------------------------------------------------------------------------
-# Bootstrap: import each stub module so its register() calls populate REGISTRY
-# at package import time. Adding a new stub family means importing it here.
-#
-# Scaffold PR: REGISTRY ships empty. Stub modules (sms / text / intent /
-# telephony / network / runtime / filesystem / content) arrive in the
-# follow-up "fill stubs" PR — re-enable their side-effect imports here when
-# each module is added.
-# ---------------------------------------------------------------------------

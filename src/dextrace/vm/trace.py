@@ -5,11 +5,10 @@
 """
 vm/trace.py — ExecutionTrace: per-instruction record of VM execution.
 
-P5.3 deliverable. Designed for replay-debugging and coverage analysis.
-Capture is opt-in: pass an ExecutionTrace instance to DalvikVM(...,
-execution_trace=...) and it accumulates one TraceStep per executed
-instruction. The engine pays nothing when no trace is attached (single
-None check per step).
+Designed for replay-debugging and coverage analysis. Capture is opt-in:
+pass an ExecutionTrace instance to DalvikVM(..., execution_trace=...) and
+it accumulates one TraceStep per executed instruction. The engine pays
+nothing when no trace is attached (single None check per step).
 
 Each TraceStep records:
   - the executing frame (code_off + uoff + mnemonic)

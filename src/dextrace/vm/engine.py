@@ -3,20 +3,20 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-vm/engine.py — DalvikVM: iterative execution engine for P1+P2.
+vm/engine.py — DalvikVM: iterative execution engine.
 
-Architecture (per design doc rev 7):
+Architecture:
   - eval_table: Dict[str, Callable[[DecodedInsn, VMState], None]]
-    * invoke-* opcodes are NOT in this table (OV-1)
+    * invoke-* opcodes are NOT in this table
     * return-* opcodes ARE handled via _ReturnSignal
   - invoke-* handled inline in the main loop with access to engine private data
-  - pending_result lifecycle (OV-2, OV-3):
+  - pending_result lifecycle:
     * cleared at run() entry
     * invoke asserts pending_result is None before setting
     * move-result* handlers consume and clear it
-  - RegisterFile sized by code_item.registers_size at invoke time (OV-4)
-  - Bounds check raises DexTraceVMError (OV-5)
-  - Callee registers isolated via snapshot on push and restore on return (OV-6)
+  - RegisterFile sized by code_item.registers_size at invoke time
+  - Bounds check raises DexTraceVMError
+  - Callee registers isolated via snapshot on push and restore on return
 
 Execution loop invariant:
   - `code_off`, `insns`, `uoff_to_idx` always describe the CURRENT frame.
@@ -96,7 +96,7 @@ def _handle_return(insn: DecodedInsn, state: VMState) -> None:
 
 
 def _handle_return_wide(insn: DecodedInsn, state: VMState) -> None:
-    # P5b: sign-extend so the surfaced value reflects Java's signed long
+    # sign-extend so the surfaced value reflects Java's signed long
     # semantics. Without i64, a returned -1L would print as 2^64-1.
     val = i64(state.registers.get_wide(reg_index(insn.regs[0])))
     raise _ReturnSignal(val, is_wide=True)
@@ -134,14 +134,14 @@ class DalvikVM:
         # instruction cache: code_off -> List[DecodedInsn]
         self._insn_cache: Dict[int, List[DecodedInsn]] = {}
 
-        # P5a: parsed try/catch table cache, populated on first throw inside
+        # parsed try/catch table cache, populated on first throw inside
         # a method. Keyed by code_off, sibling of _insn_cache.
         self._handler_cache: Dict[int, List[TryItem]] = {}
 
         # Optional verbose trace sink: called with human-readable [INFO] messages
         self._trace_sink = trace_sink
 
-        # P5.3: optional structured execution trace. When set, the main
+        # optional structured execution trace. When set, the main
         # _execute loop records one TraceStep per instruction.
         self._execution_trace = execution_trace
 
@@ -149,11 +149,11 @@ class DalvikVM:
         # create a new instance per vm.run() call.
         self._call_tree_trace = call_tree_trace
 
-        # Object heap and class hierarchy for P3 dispatch
+        # Object heap and class hierarchy
         self._heap = ObjectHeap()
         self._hierarchy = ClassHierarchy(dex_bytes, resolver)
 
-        # P4: Android-API stub registry (DI for tests; defaults to global REGISTRY)
+        # Android-API stub registry (DI for tests; defaults to global REGISTRY)
         # Strict mode escalates void external misses to errors as well.
         self._stub_registry: Dict[str, StubCallable] = (
             stub_registry
@@ -162,11 +162,11 @@ class DalvikVM:
         )
         self._strict_stubs = strict_stubs
 
-        # P4: every stub call appends one dict here. Reset at run() entry so
+        # every stub call appends one dict here. Reset at run() entry so
         # consecutive vm.run() calls observe isolated trace logs.
         self._api_calls: List[Dict[str, Any]] = []
 
-        # P5d: static-fields map keyed by full Dalvik field signature
+        # static-fields map keyed by full Dalvik field signature
         # ("Lcls;->name:type"). Reset at run() entry (heap.reset path) so
         # static state cannot bleed between method runs.
         self._static_fields: Dict[str, Any] = {}
@@ -198,7 +198,7 @@ class DalvikVM:
 
         self._eval["new-instance"] = _handle_new_instance
 
-        # P5d: const-string materializes the resolved string onto the heap
+        # const-string materializes the resolved string onto the heap
         # so downstream code (iget/iput-object, stubs that read via
         # heap.get_value) sees a proper Ljava/lang/String; handle instead of
         # an integer hash. Disassembler delivers `param` already wrapped in
@@ -213,7 +213,7 @@ class DalvikVM:
         self._eval["const-string"] = _handle_const_string
         self._eval["const-string/jumbo"] = _handle_const_string
 
-        # P5d: const-class materializes a Class<?> object whose value is the
+        # const-class materializes a Class<?> object whose value is the
         # underlying type descriptor. The minimal model is enough for code
         # that uses `Foo.class` as a reflection key or compares class
         # references for equality.
@@ -223,9 +223,6 @@ class DalvikVM:
             state.registers.set(reg_index(insn.regs[0]), handle)
 
         self._eval["const-class"] = _handle_const_class
-
-        # Scaffold PR: _throw and _type_check register() calls re-enabled
-        # in follow-up "fill handlers" PR.
 
         self._final_state: Optional[VMState] = None
 
@@ -250,7 +247,7 @@ class DalvikVM:
         """
         args = args or []
         self._heap.reset()  # isolate heap state between run() calls
-        self._static_fields.clear()  # P5d: same isolation for static fields
+        self._static_fields.clear()  # same isolation for static fields
         self._api_calls.clear()
 
         code_off = self._sig_to_codeoff.get(entry_sig)
@@ -278,7 +275,7 @@ class DalvikVM:
                 rf.set(dest, v)
 
         state = VMState(registers=rf, pc=0)
-        state.pending_result = None  # OV-2: clear at entry
+        state.pending_result = None  # clear at entry
 
         if self._call_tree_trace:
             self._call_tree_trace.on_enter(entry_sig)
@@ -341,7 +338,7 @@ class DalvikVM:
             next_pc = insn.uoff + insn.size_units
             mnemonic = insn.mnemonic
 
-            # P5.3: per-instruction snapshot for trace diff. Skipped entirely
+            # per-instruction snapshot for trace diff. Skipped entirely
             # when no trace is attached so the hot path stays cheap.
             if trace is not None:
                 pre_code_off = code_off
@@ -351,7 +348,7 @@ class DalvikVM:
                 t0 = perf_counter_ns()
 
             try:
-                # ---- invoke-* handled inline (OV-1) ----------------------
+                # ---- invoke-* handled inline ----------------------
                 if mnemonic.startswith("invoke-"):
                     callee_code_off = self._do_invoke(
                         insn, state, caller_code_off=code_off
@@ -417,7 +414,7 @@ class DalvikVM:
                         )
                     return ret.value
 
-                # Restore caller frame (OV-6)
+                # Restore caller frame
                 frame = state.call_stack.pop()
                 if self._call_tree_trace:
                     self._call_tree_trace.on_exit(ret.value)
@@ -429,7 +426,7 @@ class DalvikVM:
                 insns = self._get_insns(code_off)
                 uoff_to_idx = {ins.uoff: i for i, ins in enumerate(insns)}
 
-                # Make return value available to move-result* (OV-3)
+                # Make return value available to move-result*
                 state.pending_result = ret.value
                 state.pending_result_is_wide = ret.is_wide
                 if trace is not None:
@@ -446,7 +443,7 @@ class DalvikVM:
                     )
                 continue
             except _ThrowSignal as sig:
-                # P5a: walk catch tables in current frame; on miss pop frames
+                # walk catch tables in current frame; on miss pop frames
                 # one at a time until either a matching handler is found or
                 # the call stack is empty (uncaught -> top-level error).
                 throw_pc = insn.uoff  # site of the instruction that threw
@@ -456,8 +453,7 @@ class DalvikVM:
                     )
                     if matched is not None:
                         # Hand off to the catch handler. Lazy-allocate a heap
-                        # object if the throw didn't carry one (e.g. div-by-zero
-                        # raised by a future P5b handler).
+                        # object if the throw didn't carry one.
                         handle = sig.exc_handle
                         if handle == 0:
                             handle = self._heap.allocate(sig.class_desc)
@@ -522,7 +518,7 @@ class DalvikVM:
                 )
 
     # ------------------------------------------------------------------
-    # P5.3: trace recording
+    # trace recording
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -604,7 +600,7 @@ class DalvikVM:
                 f"invoke at pc={insn.uoff:#06x}: missing method signature"
             )
 
-        # P4: stub-first dispatch. Registry is keyed by the static (compile-time)
+        # stub-first dispatch. Registry is keyed by the static (compile-time)
         # callee signature, so it sits in front of both vtable resolution and
         # the external-miss path.
         stub = self._stub_registry.get(callee_sig)
@@ -612,7 +608,7 @@ class DalvikVM:
             self._invoke_stub(stub, callee_sig, insn, state)
             return None
 
-        # P5f: invoke-interface uses the same runtime-class vtable lookup as
+        # invoke-interface uses the same runtime-class vtable lookup as
         # invoke-virtual. Java semantics require the runtime class implements
         # the interface, so (name, proto) will be present in its vtable.
         if mnemonic in (
@@ -629,7 +625,7 @@ class DalvikVM:
                 )
             runtime_desc = self._heap.get_class(receiver_handle)
 
-            # P4: invoke-virtual on an external (no-stub) class falls through
+            # invoke-virtual on an external (no-stub) class falls through
             # to the external-miss policy instead of raising a vtable miss.
             if not self._hierarchy.has_class(runtime_desc):
                 self._handle_external_miss(callee_sig, insn, state)
@@ -662,12 +658,12 @@ class DalvikVM:
                 self._handle_external_miss(callee_sig, insn, state)
                 return None
 
-        # OV-3: stale pending_result guard — only applies to internal callees.
+        # stale pending_result guard — only applies to internal callees.
         # A prior external stub may have left pending_result=0 if the caller
         # chose not to use the return value (valid Dalvik); clear it silently.
         state.pending_result = None
 
-        # OV-4: size callee RegisterFile from code_item
+        # size callee RegisterFile from code_item
         assert callee_code_off is not None  # resolve_virtual raises on miss
         callee_code = self._parser.parse_code_item(callee_code_off)
         callee_rf = RegisterFile(callee_code.registers_size)
@@ -683,13 +679,13 @@ class DalvikVM:
             if dest_slot < callee_code.registers_size:
                 callee_rf.set(dest_slot, src_val)
 
-        # OV-6: snapshot caller registers before switching
+        # snapshot caller registers before switching
         frame = CallFrame(
             return_pc=insn.uoff + insn.size_units,
             method_desc=callee_sig,
             caller_registers=state.registers.snapshot(),
             caller_code_off=caller_code_off,
-            invoke_pc=insn.uoff,  # P5a: catch-walk needs caller's call site
+            invoke_pc=insn.uoff,  # catch-walk needs caller's call site
         )
         state.call_stack.append(frame)
 
@@ -702,7 +698,7 @@ class DalvikVM:
         return callee_code_off
 
     # ------------------------------------------------------------------
-    # P4: stub dispatch + external-miss policy
+    # stub dispatch + external-miss policy
     # ------------------------------------------------------------------
 
     def _invoke_stub(
@@ -720,7 +716,7 @@ class DalvikVM:
         try:
             result = stub(stub_args, self._heap, self._api_calls)
         except (DexTraceVMError, DexTraceNotImplementedError, _ThrowSignal):
-            # P5a: stubs can model Java-level failures (e.g. URL.openConnection
+            # stubs can model Java-level failures (e.g. URL.openConnection
             # raising IOException) by raising _ThrowSignal directly. Without
             # listing it here, the broad `except Exception` below would wrap
             # the signal in a DexTraceVMError("stub failed ...") and the
@@ -736,7 +732,7 @@ class DalvikVM:
             self._call_tree_trace.on_stub(self._api_calls[-1])
 
         if result is VOID:
-            # Void stubs leave a 0 in pending_result; OV-3's stale guard
+            # Void stubs leave a 0 in pending_result
             # clears it before the next non-move-result instruction runs.
             state.pending_result = 0
             state.pending_result_is_wide = False
@@ -771,7 +767,7 @@ class DalvikVM:
             raise DexTraceNotImplementedError(
                 f"unknown Android API: {callee_sig} (pc={insn.uoff:#06x})"
             )
-        # Legacy void-miss: stub with 0 (OV-3's stale guard cleans up).
+        # Legacy void-miss: stub with 0.
         state.pending_result = 0
         state.pending_result_is_wide = False
 
@@ -786,7 +782,7 @@ class DalvikVM:
         return self._insn_cache[code_off]
 
     # ------------------------------------------------------------------
-    # P5c: switch dispatch (inline so handlers can reach raw insn bytes)
+    # switch dispatch (inline so handlers can reach raw insn bytes)
     # ------------------------------------------------------------------
 
     def _do_packed_switch(
@@ -861,7 +857,7 @@ class DalvikVM:
             arr[i] = int(v)
 
     # ------------------------------------------------------------------
-    # P5a: try/catch table cache + handler lookup
+    # try/catch table cache + handler lookup
     # ------------------------------------------------------------------
 
     def _get_tries(self, code_off: int) -> List[TryItem]:

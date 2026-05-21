@@ -79,7 +79,7 @@ def handle_const_wide_high16(insn: DecodedInsn, state: VMState) -> None:
     state.registers.set_wide(dest, int(insn.param or 0) << 48)
 
 
-# const-string and const-string/jumbo are heap-allocating opcodes (P5d) and
+# const-string and const-string/jumbo are heap-allocating opcodes and
 # live in engine.py as closures so they can capture the heap reference.
 
 
@@ -133,7 +133,7 @@ def handle_move_object_16(insn: DecodedInsn, state: VMState) -> None:
 
 
 # ---------------------------------------------------------------------------
-# move-result*  (consume pending_result — OV-3)
+# move-result*  (consume pending_result)
 # ---------------------------------------------------------------------------
 
 
@@ -166,7 +166,7 @@ def handle_move_result_wide(insn: DecodedInsn, state: VMState) -> None:
 
 
 def handle_move_result_object(insn: DecodedInsn, state: VMState) -> None:
-    # For P1/P2: treat object results same as 32-bit ints
+    # Treat object results same as 32-bit ints
     if state.pending_result is None:
         raise DexTraceVMError("move-result-object: no pending result")
     dest = reg_index(insn.regs[0])
@@ -179,7 +179,7 @@ def handle_move_result_object(insn: DecodedInsn, state: VMState) -> None:
 
 
 # ---------------------------------------------------------------------------
-# move-exception (P5a)  — consume state.pending_exception
+# move-exception  — consume state.pending_exception
 # ---------------------------------------------------------------------------
 
 

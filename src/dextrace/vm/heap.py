@@ -8,17 +8,15 @@ vm/heap.py — Object heap: integer handle → HeapEntry.
 Handles are sequential positive integers starting at 1. Handle 0 is reserved
 to represent null (like null in Dalvik).
 
-P4 introduced the optional `value` slot so string-bearing handles
+Each HeapEntry carries an optional `value` slot so string-bearing handles
 (Ljava/lang/String;) can carry their underlying Python str. Stubs use
 heap.get_value(handle) to read the materialized value when capturing IoCs.
 
-P5d reshape:
-  Replaces the (class_desc, value) tuple with a HeapEntry dataclass that
-  also tracks instance fields. Instance fields are keyed by their full
-  field signature ("Lcls;->name:type") so iget/iput-foo cannot collide
-  across inherited classes that happen to share a field name.
+HeapEntry also tracks instance fields, keyed by their full field signature
+("Lcls;->name:type") so iget/iput-foo cannot collide across inherited
+classes that happen to share a field name.
 
-  The public surface — allocate, get_class, get_value — is preserved.
+Public surface: allocate, get_class, get_value.
 """
 
 from __future__ import annotations
@@ -46,8 +44,8 @@ class ObjectHeap:
     Minimal object heap for the DalvikVM interpreter.
 
     Tracks allocated objects as HeapEntry records keyed by integer handle.
-    The handle is an opaque integer stored in registers by new-instance
-    (and by P5d const-string / const-class). invoke-virtual reads it to
+    The handle is an opaque integer stored in registers by new-instance,
+    const-string, or const-class. invoke-virtual reads it to
     look up the runtime class for vtable dispatch.
     """
 
@@ -68,7 +66,7 @@ class ObjectHeap:
         return handle
 
     # ------------------------------------------------------------------
-    # P5e: arrays
+    # arrays
     # ------------------------------------------------------------------
 
     def allocate_array(self, array_desc: str, length: int) -> int:
@@ -127,7 +125,7 @@ class ObjectHeap:
         self._entry(handle).value = value
 
     # ------------------------------------------------------------------
-    # P5d: instance fields
+    # instance fields
     # ------------------------------------------------------------------
 
     def set_instance_field(

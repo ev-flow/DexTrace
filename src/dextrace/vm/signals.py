@@ -15,7 +15,7 @@ from __future__ import annotations
 
 class _ThrowSignal(Exception):
     """
-    Raised by `throw` and by Java-faithful raises (e.g. div-by-zero in P5b)
+    Raised by `throw` and by Java-faithful raises (e.g. div-by-zero)
     so the engine can walk the catch table in this frame and, if no match,
     pop frames until it finds one or exhausts the call stack.
 

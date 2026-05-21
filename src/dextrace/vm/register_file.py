@@ -8,7 +8,7 @@ vm/register_file.py — Dalvik register file.
 Registers are 32-bit slots. Wide values (long/double) occupy a pair vN:vN+1
 where vN holds the low 32 bits and vN+1 holds the high 32 bits.
 
-Bounds: get/set raise DexTraceVMError on out-of-range index (OV-5).
+Bounds: get/set raise DexTraceVMError on out-of-range index.
 """
 
 from __future__ import annotations

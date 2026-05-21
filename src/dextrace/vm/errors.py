@@ -8,7 +8,7 @@ vm/errors.py — VM exception hierarchy.
 Two layers:
   - DexTraceVMError / DexTraceNotImplementedError: top-level, indicate the
     interpreter cannot proceed. Bubble out of run() to the CLI.
-  - DexTraceJavaException + 6 P5a subclasses: model Java-level exceptions
+  - DexTraceJavaException + 6 subclasses: model Java-level exceptions
     that DEX code catches via try/catch tables. Carry a Dalvik class
     descriptor so catch-walk uses class_hierarchy.is_subtype() rather than
     string matching on the message.

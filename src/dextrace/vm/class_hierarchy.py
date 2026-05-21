@@ -17,8 +17,8 @@ Algorithm:
 External superclasses (e.g. Ljava/lang/Object; not defined in this DEX) get an
 empty vtable, which is correct — they have no Dalvik implementation to dispatch to.
 
-P5a addition: `is_subtype(child, parent)` walks `_superclass`. To make catch-table
-walks correct for the Java built-in exception chain (which is never in the DEX),
+`is_subtype(child, parent)` walks `_superclass`. To make catch-table walks
+correct for the Java built-in exception chain (which is never in the DEX),
 the constructor seeds `_superclass` with a small, fixed Java built-in hierarchy
 covering Throwable / Exception / RuntimeException + common subclasses. Real DEX
 classes can override these (e.g. a custom `Lcom/foo/MyException;` with its own

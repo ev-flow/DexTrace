@@ -5,7 +5,7 @@
 """
 vm/state.py — VM execution state.
 
-pending_result lifecycle (OV-2, OV-3):
+pending_result lifecycle:
   - DalvikVM.run() clears pending_result=None at entry (stale result guard)
   - invoke path: assert pending_result is None before setting (catches
     back-to-back invokes without move-result; raises DexTraceVMError)
@@ -30,7 +30,7 @@ class VMState:
     call_stack: List[CallFrame] = field(default_factory=list)
     pending_result: Optional[Union[int, str]] = None
     pending_result_is_wide: bool = False
-    # P5a: heap handle of an exception object whose catch handler is about to
+    # heap handle of an exception object whose catch handler is about to
     # run; consumed by `move-exception`. Set by the engine when a _ThrowSignal
     # matches a catch entry; cleared by move-exception (and by the engine on
     # frame unwind to prevent stale values leaking across catches).
