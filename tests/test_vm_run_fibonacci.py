@@ -28,7 +28,7 @@ from unittest.mock import patch
 import pytest
 
 FIXTURE = (
-    Path(__file__).parent.parent / "fixtures" / "samples" / "fib_recursive.dex"
+    Path(__file__).parent / "fixtures" / "samples" / "fib_recursive.dex"
 )
 ENTRY = "Lp2/Fib;->fib(I)I"
 

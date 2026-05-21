@@ -26,7 +26,7 @@ from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
-FIXTURE = Path(__file__).parent.parent / "fixtures" / "samples" / "arrays.dex"
+FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "arrays.dex"
 ENTRY = "Lp5e;->arraySum()I"
 
 

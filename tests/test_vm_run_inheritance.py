@@ -48,7 +48,7 @@ from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 from dextrace.vm.errors import DexTraceNotImplementedError, DexTraceVMError
 
-FIXTURE = Path(__file__).parent.parent / "fixtures" / "samples" / "inheritance.dex"
+FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "inheritance.dex"
 ENTRY = "Lp3/Main;->entry()I"
 
 
@@ -131,7 +131,7 @@ class TestRegressionConstReturnFib:
 
     def test_const_return_still_passes(self):
         const_return_dex = (
-            Path(__file__).parent.parent / "fixtures" / "samples" / "const_return.dex"
+            Path(__file__).parent / "fixtures" / "samples" / "const_return.dex"
         )
         if not const_return_dex.exists():
             pytest.skip("const_return fixture not found")
@@ -144,7 +144,7 @@ class TestRegressionConstReturnFib:
 
     def test_fibonacci_still_passes(self):
         fib_dex = (
-            Path(__file__).parent.parent / "fixtures" / "samples" / "fib_recursive.dex"
+            Path(__file__).parent / "fixtures" / "samples" / "fib_recursive.dex"
         )
         if not fib_dex.exists():
             pytest.skip("fib_recursive fixture not found")

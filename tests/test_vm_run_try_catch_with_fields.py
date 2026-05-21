@@ -25,7 +25,7 @@ from dextrace.core.dex_code_map import build_sig_to_codeoff_map
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.engine import DalvikVM
 
-FIXTURE = Path(__file__).parent.parent / "fixtures" / "samples" / "try_catch_npe_with_fields.dex"
+FIXTURE = Path(__file__).parent / "fixtures" / "samples" / "try_catch_npe_with_fields.dex"
 ENTRY = "Lp5ad;->igetNpe()I"
 
 

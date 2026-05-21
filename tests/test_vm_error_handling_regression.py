@@ -27,7 +27,7 @@ from dextrace.cli.main import main
 from dextrace.vm.decoder import DexParseError, walk_method
 
 FIXTURE_CONST_RETURN = (
-    Path(__file__).parent.parent / "fixtures" / "samples" / "const_return.dex"
+    Path(__file__).parent / "fixtures" / "samples" / "const_return.dex"
 )
 ENTRY_P1 = "Lp1;->main()I"
 

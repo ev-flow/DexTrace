@@ -23,7 +23,7 @@ from unittest.mock import patch
 import pytest
 
 FIXTURE = (
-    Path(__file__).parent.parent / "fixtures" / "samples" / "const_return.dex"
+    Path(__file__).parent / "fixtures" / "samples" / "const_return.dex"
 )
 ENTRY = "Lp1;->main()I"
 

@@ -30,7 +30,7 @@ from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.signals import _ThrowSignal
 
 FIXTURE = (
-    Path(__file__).parent.parent / "fixtures" / "samples" / "try_catch_with_stubs.dex"
+    Path(__file__).parent / "fixtures" / "samples" / "try_catch_with_stubs.dex"
 )
 ENTRY = "Lp5x;->openCatch()I"
 EXTERNAL_SIG = "Ldemo/Net;->openConnection()V"
