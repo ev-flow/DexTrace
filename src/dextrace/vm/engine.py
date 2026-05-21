@@ -62,12 +62,15 @@ from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.state import VMState
 from dextrace.vm.trace import CallTreeTrace, ExecutionTrace, TraceStep
 
+import dextrace.vm.handlers.arithmetic as _arith
+import dextrace.vm.handlers.array as _array
+import dextrace.vm.handlers.branch as _branch
+import dextrace.vm.handlers.compare as _compare
+import dextrace.vm.handlers.field as _field
 import dextrace.vm.handlers.move as _move
-
-# Scaffold PR: only `move` handler ships. Remaining handlers (arithmetic,
-# array, branch, compare, field, throw, type_check, type_conv) land in
-# follow-up "fill handlers" PR — engine re-enables their .register() calls
-# below when each module is added.
+import dextrace.vm.handlers.throw as _throw
+import dextrace.vm.handlers.type_check as _type_check
+import dextrace.vm.handlers.type_conv as _type_conv
 
 # ---------------------------------------------------------------------------
 # Internal signals
@@ -179,7 +182,12 @@ class DalvikVM:
         # eval table (invoke-* and return-* NOT here)
         self._eval: Dict[str, Any] = {}
         _move.register(self._eval)
-        # Scaffold PR: other handler register() calls re-enabled in follow-up.
+        _arith.register(self._eval)
+        _branch.register(self._eval)
+        _compare.register(self._eval)
+        _type_conv.register(self._eval)
+        _field.register(self._eval, self._heap, self._static_fields)
+        _array.register(self._eval, self._heap)
 
         self._eval["return-void"] = _handle_return_void
         self._eval["return"] = _handle_return
@@ -228,6 +236,15 @@ class DalvikVM:
             state.registers.set(reg_index(insn.regs[0]), handle)
 
         self._eval["const-class"] = _handle_const_class
+
+        # Throw needs the heap to resolve the exception class descriptor.
+        _throw.register(self._eval, self._heap)
+
+        # Check-cast / instance-of need heap + class hierarchy; monitor-*
+        # records lock activity through the trace_sink when one is provided.
+        _type_check.register(
+            self._eval, self._heap, self._hierarchy, self._trace_sink
+        )
 
         self._final_state: Optional[VMState] = None
 
