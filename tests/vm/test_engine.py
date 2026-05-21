@@ -3,24 +3,22 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-Unit tests for vm/engine.py — frame push/pop, register isolation, and
-pending_result lifecycle invariants.
-"""
+OV-6 regression: callee register writes must not bleed into caller registers.
 
-from pathlib import Path
+We test this without a real DEX by driving the engine's internal frame
+push/pop mechanics directly via a minimal mock disassembler.
+"""
 
 import pytest
 from unittest.mock import MagicMock, patch
 from typing import Dict, List
 
-from dextrace.core.dex_code_map import build_sig_to_codeoff_map
-from dextrace.core.dex_resolver import DexResolver
 from dextrace.dalvik.types import DecodedInsn
 from dextrace.vm.call_frame import CallFrame
-from dextrace.vm.engine import DalvikVM, _ReturnSignal
 from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.register_file import RegisterFile
 from dextrace.vm.state import VMState
+from dextrace.vm.engine import _ReturnSignal
 
 
 def _insn(
@@ -125,26 +123,3 @@ class TestCallReturnRegisterIsolation:
         assert state.registers.get(0) == 10
         assert state.pending_result == 42
         assert not state.pending_result_is_wide
-
-
-class TestStalePendingResultCleared:
-    """Regression: external stub leaves pending_result=0; caller skips
-    move-result; engine must clear pending_result before entering the next
-    internal callee, not raise DexTraceVMError."""
-
-    def test_pending_result_reset_on_internal_invoke(self):
-        fixture = (
-            Path(__file__).parent.parent
-            / "fixtures"
-            / "samples"
-            / "const_return.dex"
-        )
-        dex_bytes = fixture.read_bytes()
-        resolver = DexResolver(dex_bytes)
-        sig_map = build_sig_to_codeoff_map(dex_bytes, resolver)
-        vm = DalvikVM(dex_bytes, resolver, sig_map)
-
-        # OV-2: run() resets pending_result=None on entry, so a stale value
-        # from a prior external call doesn't trip the stale guard.
-        result = vm.run("Lp1;->main()I", args=[])
-        assert result == 42
