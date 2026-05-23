@@ -13,29 +13,29 @@ from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.class_hierarchy import ClassHierarchy
 from dextrace.vm.errors import DexTraceNotImplementedError, DexTraceVMError
 
-P3_FIXTURE = (
+INHERITANCE_FIXTURE = (
     Path(__file__).parent.parent / "fixtures" / "samples" / "inheritance.dex"
 )
-P2_FIXTURE = (
+SINGLE_CLASS_FIXTURE = (
     Path(__file__).parent.parent / "fixtures" / "samples" / "fib_recursive.dex"
 )
 
 
 @pytest.fixture(scope="module")
 def inheritance_hierarchy():
-    dex = P3_FIXTURE.read_bytes()
+    dex = INHERITANCE_FIXTURE.read_bytes()
     resolver = DexResolver(dex)
     return ClassHierarchy(dex, resolver), build_sig_to_codeoff_map(dex, resolver)
 
 
 @pytest.fixture(scope="module")
 def fibonacci_hierarchy():
-    dex = P2_FIXTURE.read_bytes()
+    dex = SINGLE_CLASS_FIXTURE.read_bytes()
     resolver = DexResolver(dex)
     return ClassHierarchy(dex, resolver)
 
 
-class TestClassHierarchyP3:
+class TestClassHierarchyInheritance:
     def test_mid_foo_resolves_to_mid_implementation(self, inheritance_hierarchy):
         hier, sig_map = inheritance_hierarchy
         code_off = hier.resolve_virtual("Lp3/Mid;", "foo", "()I")
@@ -63,8 +63,8 @@ class TestClassHierarchyP3:
             hier.resolve_virtual("Lp3/Mid;", "nonexistent", "()I")
 
 
-class TestClassHierarchyP2:
+class TestClassHierarchySingleClass:
     def test_single_class_dex_no_crash(self, fibonacci_hierarchy):
-        # P2 has only one class; hierarchy builds without error
+        # Single-class hierarchy builds without error
         hier = fibonacci_hierarchy
         assert hier is not None

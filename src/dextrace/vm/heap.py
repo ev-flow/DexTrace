@@ -133,7 +133,7 @@ class ObjectHeap:
     ) -> None:
         """
         Store `val` in the named instance field of `handle`. Field key is the
-        full Dalvik signature (e.g. "Lp5d/Box;->count:I") so an inherited
+        full Dalvik signature (e.g. "Lcom/foo/Box;->count:I") so an inherited
         field with the same simple name on a different class cannot clash.
         """
         self._entry(handle).instance_fields[field_sig] = val

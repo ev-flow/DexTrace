@@ -319,8 +319,7 @@ if __name__ == "__main__":
         Path(__file__).parent.parent
         / "tests"
         / "fixtures"
-        / "samples"
-        / "try_catch.dex"
+        / "samples" / "try_catch.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)

@@ -6,11 +6,11 @@
 Const-return VM execution integration test.
 
 Fixture: tests/fixtures/samples/const_return.dex
-  class Lp1; { public static int main() { const/16 v0, 42; return v0; } }
+  class Lcom/example/ConstReturn; { public static int main() { const/16 v0, 42; return v0; } }
 
 One-liner verification:
   dextrace run tests/fixtures/samples/const_return.dex \
-      --entry 'Lp1;->main()I'
+      --entry 'Lcom/example/ConstReturn;->main()I'
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from pathlib import Path
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "samples" / "const_return.dex"
 )
-ENTRY = "Lp1;->main()I"
+ENTRY = "Lcom/example/ConstReturn;->main()I"
 
 
 def test_fixture_exists():

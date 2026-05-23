@@ -25,7 +25,7 @@ class PayloadInfo:
 
 @dataclass(frozen=True)
 class PackedSwitchTable:
-    """Decoded packed-switch payload (P5c).
+    """Decoded packed-switch payload.
 
     `first_key` is the key for `targets[0]`. `targets` are *relative* code-unit
     offsets from the switch instruction's pc — to compute the absolute branch
@@ -38,7 +38,7 @@ class PackedSwitchTable:
 
 @dataclass(frozen=True)
 class SparseSwitchTable:
-    """Decoded sparse-switch payload (P5c).
+    """Decoded sparse-switch payload.
 
     `keys` is sorted ascending. `targets[i]` is the relative offset for `keys[i]`.
     """
@@ -49,7 +49,7 @@ class SparseSwitchTable:
 
 @dataclass(frozen=True)
 class FillArrayDataTable:
-    """Decoded fill-array-data payload (P5e).
+    """Decoded fill-array-data payload.
 
     `element_width` is the per-element byte width (1, 2, 4, or 8). `elements`
     are decoded as Python ints (signed for widths 1/2/4/8 — the engine
@@ -79,7 +79,7 @@ def _s32_at(insns_bytes: bytes, uoff: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Decoders (P5c)
+# Decoders
 # ---------------------------------------------------------------------------
 
 

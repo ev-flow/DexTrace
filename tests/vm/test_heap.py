@@ -61,7 +61,7 @@ class TestObjectHeap:
 
 
 class TestObjectHeapValueSlot:
-    """P4: heap entries can carry a Python value (e.g. str for Ljava/lang/String;)."""
+    """Heap entries can carry a Python value (e.g. str for Ljava/lang/String;)."""
 
     def test_default_value_is_none(self):
         heap = ObjectHeap()

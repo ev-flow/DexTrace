@@ -17,7 +17,7 @@ import pytest
 from dextrace.core.dex_resolver import DexResolver
 from dextrace.vm.class_hierarchy import ClassHierarchy
 
-# Use the P5a fixture as a minimal DEX for hierarchy construction. is_subtype
+# Use a minimal DEX for hierarchy construction. is_subtype
 # behavior is mostly driven by the Java built-in seed, which is independent
 # of the DEX content.
 FIXTURE = (

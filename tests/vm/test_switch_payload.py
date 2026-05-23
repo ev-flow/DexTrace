@@ -3,7 +3,7 @@
 # See the file 'LICENSE' for copying permission.
 
 """
-P5c unit tests for packed-switch / sparse-switch payload decoders.
+Unit tests for packed-switch / sparse-switch payload decoders.
 
 We construct synthetic insns_bytes containing only a payload (placed at uoff 0
 for simplicity) and verify the decoded keys/targets match the spec.

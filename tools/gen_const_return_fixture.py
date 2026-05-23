@@ -5,7 +5,7 @@
 Build tests/fixtures/samples/const_return.dex programmatically.
 
 DEX contains one class and one method:
-  class:  Lp1;  (extends Ljava/lang/Object;)
+  class:  Lcom/example/ConstReturn;  (extends Ljava/lang/Object;)
   method: public static int main()
   body:   const/16 v0, 42
           return v0
@@ -44,16 +44,16 @@ def build_const_return_dex() -> (
 ):  # pylint: disable=too-many-locals,too-many-statements
     # -----------------------------------------------------------------------
     # String table (must be sorted by Unicode code point — DEX requirement)
-    # "I" < "Ljava/lang/Object;" < "Lp1;" < "main"
+    # "I" < "Lcom/example/ConstReturn;" < "Ljava/lang/Object;" < "main"
     # -----------------------------------------------------------------------
-    strings = ["I", "Ljava/lang/Object;", "Lp1;", "main"]
-    # indices:   0          1                2        3
+    strings = ["I", "Lcom/example/ConstReturn;", "Ljava/lang/Object;", "main"]
+    # indices:   0          1                      2                3
 
     # -----------------------------------------------------------------------
     # Type IDs (sorted by descriptor string)
     # type_idx 0 -> string_idx 0  = "I"
-    # type_idx 1 -> string_idx 1  = "Ljava/lang/Object;"
-    # type_idx 2 -> string_idx 2  = "Lp1;"
+    # type_idx 1 -> string_idx 1  = "Lcom/example/ConstReturn;"
+    # type_idx 2 -> string_idx 2  = "Ljava/lang/Object;"
     # -----------------------------------------------------------------------
     type_string_ids = [0, 1, 2]
 
@@ -66,11 +66,11 @@ def build_const_return_dex() -> (
 
     # -----------------------------------------------------------------------
     # Method IDs
-    # method 0: Lp1;->main()I
-    #   class_idx=2  proto_idx=0  name_string_idx=3
+    # method 0: Lcom/example/ConstReturn;->main()I
+    #   class_idx=1  proto_idx=0  name_string_idx=3
     # -----------------------------------------------------------------------
     # (class_type_idx, proto_idx, name_string_idx)
-    method_ids = [(2, 0, 3)]
+    method_ids = [(1, 0, 3)]
 
     # -----------------------------------------------------------------------
     # Instructions:  const/16 v0, #42 ; return v0
@@ -183,9 +183,9 @@ def build_const_return_dex() -> (
     # class_def_item (32 bytes)
     class_def_item = struct.pack(
         "<IIIIIIII",
-        2,  # class_idx -> "Lp1;"
+        1,  # class_idx -> "Lcom/example/ConstReturn;"
         0x1,  # access_flags: public
-        1,  # superclass_idx -> "Ljava/lang/Object;"
+        2,  # superclass_idx -> "Ljava/lang/Object;"
         0,  # interfaces_off
         0xFFFFFFFF,  # source_file_idx: NO_INDEX
         0,  # annotations_off
