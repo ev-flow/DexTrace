@@ -91,3 +91,21 @@ REGISTRY: Dict[str, StubCallable] = {}
 def register(signature: str, fn: StubCallable) -> None:
     """Register a stub for a method signature. Last writer wins."""
     REGISTRY[signature] = fn
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap: import each stub module so its register() calls populate REGISTRY
+# at package import time. Adding a new stub family means importing it here.
+# ---------------------------------------------------------------------------
+
+# pylint: disable=wrong-import-position
+from dextrace.vm.android_stubs import (
+    sms,
+)  # noqa: E402,F401  (side-effect import)
+from dextrace.vm.android_stubs import text  # noqa: E402,F401
+from dextrace.vm.android_stubs import intent  # noqa: E402,F401
+from dextrace.vm.android_stubs import telephony  # noqa: E402,F401
+from dextrace.vm.android_stubs import network  # noqa: E402,F401
+from dextrace.vm.android_stubs import runtime  # noqa: E402,F401
+from dextrace.vm.android_stubs import filesystem  # noqa: E402,F401
+from dextrace.vm.android_stubs import content  # noqa: E402,F401
