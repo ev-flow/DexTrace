@@ -68,6 +68,31 @@ class TestVMRunConstReturn:
         assert rc == 0
         out = buf.getvalue()
         assert "return: 42" in out
+        assert "registers: v0=42" in out
+
+    def test_cli_json_dump_regs_is_valid_json(self):
+        """--json --dump-regs must produce valid JSON with registers inside."""
+        from dextrace.cli.main import main
+
+        buf = io.StringIO()
+        with patch("sys.stdout", buf):
+            rc = main(
+                ["run", str(FIXTURE), "--entry", ENTRY, "--json", "--dump-regs"]
+            )
+
+        assert rc == 0
+        doc = json.loads(buf.getvalue())
+        assert doc["return"] == 42
+        assert doc["registers"] == {"v0": 42}
+
+    def test_cli_args_rejects_bool(self):
+        """`--args '[true]'` must be rejected (bool is not int/string)."""
+        from dextrace.cli.main import main
+
+        rc = main(
+            ["run", str(FIXTURE), "--entry", ENTRY, "--args", "[true]"]
+        )
+        assert rc == 1
 
     def test_cli_json_output(self):
         """--json flag produces {'return': 42}."""

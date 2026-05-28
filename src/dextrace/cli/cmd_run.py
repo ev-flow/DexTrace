@@ -197,7 +197,9 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
             _err("--args must be a JSON list, e.g. '[1,\"hi\"]'")
             return 1
         for v in method_args:
-            if not isinstance(v, (int, str)):
+            # `bool` is a subclass of `int` in Python, so isinstance(True, int)
+            # is True — use type() to reject JSON booleans explicitly.
+            if type(v) not in (int, str):
                 _err(
                     f"--args entries must be int or string, got "
                     f"{type(v).__name__}: {v!r}"
@@ -234,14 +236,20 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
 
     # --- Output ----------------------------------------------------------
     if args.json:
-        _print_json(result, vm.api_calls if args.trace else None)
+        regs = (
+            _registers_dict(vm.final_registers) if args.dump_regs else None
+        )
+        _print_json(
+            result,
+            vm.api_calls if args.trace else None,
+            regs,
+        )
     else:
         _print_text(result)
         if args.trace and tree is not None:
             _print_call_tree(tree)
-
-    if args.dump_regs:
-        _print_registers(vm.final_registers)
+        if args.dump_regs:
+            _print_registers(vm.final_registers)
 
     return 0
 
@@ -261,12 +269,23 @@ def _print_text(result) -> None:
         print(f"return: {result}")
 
 
-def _print_json(result, api_calls=None) -> None:
+def _print_json(result, api_calls=None, registers=None) -> None:
     """JSON output: 2-space indent, ensure_ascii=False."""
     payload = {"return": result}
     if api_calls is not None:
         payload["api_calls"] = api_calls
+    if registers is not None:
+        payload["registers"] = registers
     print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def _registers_dict(rf) -> dict:
+    """Non-zero registers as a dict, for JSON output."""
+    if rf is None:
+        return {}
+    return {
+        f"v{i}": rf.get(i) for i in range(len(rf)) if rf.get(i) != 0
+    }
 
 
 def _print_call_tree(tree: CallTreeTrace) -> None:
