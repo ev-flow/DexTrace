@@ -661,5 +661,5 @@ class TestStalePendingResultCleared:
         # external stub result that was never consumed).
         # Then verify that run() still succeeds (it resets pending_result=None
         # at entry per OV-2).
-        result = vm.run("LConstReturnTest;->main()I", args=[])
+        result = vm.run("Lcom/example/ConstReturn;->main()I", args=[])
         assert result == 42

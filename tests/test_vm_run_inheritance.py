@@ -139,7 +139,7 @@ class TestRegressionConstReturnFib:
         resolver = DexResolver(dex)
         sig_map = build_sig_to_codeoff_map(dex, resolver)
         vm = DalvikVM(dex, resolver, sig_map)
-        result = vm.run("LConstReturnTest;->main()I")
+        result = vm.run("Lcom/example/ConstReturn;->main()I")
         assert result == 42
 
     def test_fibonacci_still_passes(self):

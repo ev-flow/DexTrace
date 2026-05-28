@@ -37,7 +37,7 @@ def _make_vm(fixture: Path, trace: ExecutionTrace) -> DalvikVM:
 def test_trace_records_each_executed_instruction():
     trace = ExecutionTrace()
     vm = _make_vm(P5E, trace)
-    assert vm.run("Lp5e;->arraySum()I") == 60
+    assert vm.run("LArraysTest;->arraySum()I") == 60
 
     # Sanity: every step has a known mnemonic and a non-negative timing.
     assert len(trace) > 0
@@ -50,7 +50,7 @@ def test_trace_records_each_executed_instruction():
 def test_trace_captures_taken_backward_branch():
     trace = ExecutionTrace()
     vm = _make_vm(P5E, trace)
-    vm.run("Lp5e;->arraySum()I")
+    vm.run("LArraysTest;->arraySum()I")
 
     # Loop body executes 3 times → goto -8 fires 3 times as a taken branch.
     goto_steps = [s for s in trace.steps if s.mnemonic == "goto"]
@@ -63,7 +63,7 @@ def test_trace_captures_taken_backward_branch():
 def test_trace_captures_register_writes():
     trace = ExecutionTrace()
     vm = _make_vm(P5E, trace)
-    vm.run("Lp5e;->arraySum()I")
+    vm.run("LArraysTest;->arraySum()I")
 
     # const/4 v3, #0 must record a write of 0 to v3 once. add-int v3, v3, v4
     # must record three writes to v3 (one per loop iteration: 10, 30, 60).
@@ -79,7 +79,7 @@ def test_trace_captures_register_writes():
 def test_trace_captures_frame_changes_on_invoke_and_return():
     trace = ExecutionTrace()
     vm = _make_vm(P5F, trace)
-    assert vm.run("Lp5f;->callIFace()I") == 7
+    assert vm.run("LInterfaceDispatchTest;->callIFace()I") == 7
 
     # Exactly one invoke entry (callIFace → value) and one return back.
     swaps = trace.frame_changes
@@ -94,4 +94,4 @@ def test_trace_disabled_by_default_costs_nothing():
     resolver = DexResolver(dex)
     sig_map = build_sig_to_codeoff_map(dex, resolver)
     vm = DalvikVM(dex, resolver, sig_map)
-    assert vm.run("Lp5e;->arraySum()I") == 60
+    assert vm.run("LArraysTest;->arraySum()I") == 60
