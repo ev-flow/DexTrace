@@ -38,18 +38,18 @@ def fibonacci_hierarchy():
 class TestClassHierarchyInheritance:
     def test_mid_foo_resolves_to_mid_implementation(self, inheritance_hierarchy):
         hier, sig_map = inheritance_hierarchy
-        code_off = hier.resolve_virtual("Lp3/Mid;", "foo", "()I")
-        assert code_off == sig_map["Lp3/Mid;->foo()I"]
+        code_off = hier.resolve_virtual("LMid;", "foo", "()I")
+        assert code_off == sig_map["LMid;->foo()I"]
 
     def test_base_foo_resolves_to_base_implementation(self, inheritance_hierarchy):
         hier, sig_map = inheritance_hierarchy
-        code_off = hier.resolve_virtual("Lp3/Base;", "foo", "()I")
-        assert code_off == sig_map["Lp3/Base;->foo()I"]
+        code_off = hier.resolve_virtual("LBase;", "foo", "()I")
+        assert code_off == sig_map["LBase;->foo()I"]
 
     def test_mid_foo_differs_from_base_foo(self, inheritance_hierarchy):
         hier, sig_map = inheritance_hierarchy
-        mid_off = hier.resolve_virtual("Lp3/Mid;", "foo", "()I")
-        base_off = hier.resolve_virtual("Lp3/Base;", "foo", "()I")
+        mid_off = hier.resolve_virtual("LMid;", "foo", "()I")
+        base_off = hier.resolve_virtual("LBase;", "foo", "()I")
         assert mid_off != base_off
 
     def test_unknown_class_raises_vm_error(self, inheritance_hierarchy):
@@ -60,7 +60,7 @@ class TestClassHierarchyInheritance:
     def test_unknown_method_raises_vm_error(self, inheritance_hierarchy):
         hier, _ = inheritance_hierarchy
         with pytest.raises(DexTraceVMError, match="vtable miss"):
-            hier.resolve_virtual("Lp3/Mid;", "nonexistent", "()I")
+            hier.resolve_virtual("LMid;", "nonexistent", "()I")
 
 
 class TestClassHierarchySingleClass:
