@@ -12,8 +12,13 @@ Architecture:
   - invoke-* handled inline in the main loop with access to engine private data
   - pending_result lifecycle:
     * cleared at run() entry
-    * invoke asserts pending_result is None before setting
-    * move-result* handlers consume and clear it
+    * producers set pending_result_pc = uoff of the must-consume instruction
+      (invoke's next_pc, or caller's return_pc on internal return)
+    * dispatch loop clears pending_result_* whenever state.pc !=
+      pending_result_pc, so only the immediately following move-result*
+      can consume the value (Dalvik verifier semantics)
+    * void invokes / void external misses leave pending_result = None
+    * move-result* handlers consume and clear all pending_result_* fields
   - RegisterFile sized by code_item.registers_size at invoke time
   - Bounds check raises DexTraceVMError
   - Callee registers isolated via snapshot on push and restore on return
@@ -276,6 +281,8 @@ class DalvikVM:
 
         state = VMState(registers=rf, pc=0)
         state.pending_result = None  # clear at entry
+        state.pending_result_is_wide = False
+        state.pending_result_pc = None
 
         if self._call_tree_trace:
             self._call_tree_trace.on_enter(entry_sig)
@@ -337,6 +344,20 @@ class DalvikVM:
             insn = insns[idx]
             next_pc = insn.uoff + insn.size_units
             mnemonic = insn.mnemonic
+
+            # Stale pending_result guard: a value produced by a prior invoke
+            # is only consumable by the instruction at pending_result_pc
+            # (i.e. immediately following the invoke, per Dalvik verifier).
+            # Any other dispatch — including a branch landing on a
+            # non-move-result target — clears it.
+            if (
+                state.pending_result is not None
+                and state.pending_result_pc is not None
+                and state.pc != state.pending_result_pc
+            ):
+                state.pending_result = None
+                state.pending_result_is_wide = False
+                state.pending_result_pc = None
 
             # per-instruction snapshot for trace diff. Skipped entirely
             # when no trace is attached so the hot path stays cheap.
@@ -426,9 +447,14 @@ class DalvikVM:
                 insns = self._get_insns(code_off)
                 uoff_to_idx = {ins.uoff: i for i, ins in enumerate(insns)}
 
-                # Make return value available to move-result*
+                # Make return value available to move-result*. Void returns
+                # (ret.value is None) leave pending_result = None so a stray
+                # move-result in the caller raises "no pending result".
                 state.pending_result = ret.value
                 state.pending_result_is_wide = ret.is_wide
+                state.pending_result_pc = (
+                    frame.return_pc if ret.value is not None else None
+                )
                 if trace is not None:
                     self._record_trace(
                         trace,
@@ -463,6 +489,7 @@ class DalvikVM:
                         # a leftover value from the throwing call.
                         state.pending_result = None
                         state.pending_result_is_wide = False
+                        state.pending_result_pc = None
                         state.pc = matched.handler_addr
                         break
 
@@ -483,6 +510,7 @@ class DalvikVM:
                     # Stale-result guardrail also applies on cross-frame unwind.
                     state.pending_result = None
                     state.pending_result_is_wide = False
+                    state.pending_result_pc = None
                 if trace is not None:
                     self._record_trace(
                         trace,
@@ -658,10 +686,11 @@ class DalvikVM:
                 self._handle_external_miss(callee_sig, insn, state)
                 return None
 
-        # stale pending_result guard — only applies to internal callees.
-        # A prior external stub may have left pending_result=0 if the caller
-        # chose not to use the return value (valid Dalvik); clear it silently.
+        # Redundant with the dispatch-loop stale guard, but kept for clarity:
+        # ensures the callee starts with no leftover pending_result_*.
         state.pending_result = None
+        state.pending_result_is_wide = False
+        state.pending_result_pc = None
 
         # size callee RegisterFile from code_item
         assert callee_code_off is not None  # resolve_virtual raises on miss
@@ -731,20 +760,26 @@ class DalvikVM:
         if self._call_tree_trace and len(self._api_calls) > _prev_len:
             self._call_tree_trace.on_stub(self._api_calls[-1])
 
+        next_pc = insn.uoff + insn.size_units
         if result is VOID:
-            # Void stubs leave a 0 in pending_result
-            # clears it before the next non-move-result instruction runs.
-            state.pending_result = 0
+            # Void stubs produce no consumable result. A stray move-result*
+            # in the caller will raise "no pending result" via the move-result
+            # handlers (Dalvik verifier semantics).
+            state.pending_result = None
             state.pending_result_is_wide = False
+            state.pending_result_pc = None
         elif isinstance(result, Value):
             state.pending_result = result.value
             state.pending_result_is_wide = False
+            state.pending_result_pc = next_pc
         elif isinstance(result, Wide):
             state.pending_result = result.value
             state.pending_result_is_wide = True
+            state.pending_result_pc = next_pc
         elif isinstance(result, ObjectRef):
             state.pending_result = result.handle
             state.pending_result_is_wide = False
+            state.pending_result_pc = next_pc
         else:
             raise DexTraceVMError(
                 f"stub for {callee_sig} returned unsupported type "
@@ -767,9 +802,10 @@ class DalvikVM:
             raise DexTraceNotImplementedError(
                 f"unknown Android API: {callee_sig} (pc={insn.uoff:#06x})"
             )
-        # Legacy void-miss: stub with 0.
-        state.pending_result = 0
+        # Legacy void-miss: produce no consumable result.
+        state.pending_result = None
         state.pending_result_is_wide = False
+        state.pending_result_pc = None
 
     # ------------------------------------------------------------------
     # Instruction cache

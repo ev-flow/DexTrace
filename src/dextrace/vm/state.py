@@ -6,12 +6,16 @@
 vm/state.py — VM execution state.
 
 pending_result lifecycle:
-  - DalvikVM.run() clears pending_result=None at entry (stale result guard)
-  - invoke path: assert pending_result is None before setting (catches
-    back-to-back invokes without move-result; raises DexTraceVMError)
-  - move-result: reads, stores in register, clears to None
-  - move-result-wide: assert pending_result_is_wide; reads, set_wide, clears
-  - return handler: sets pending_result = return_value AFTER restoring registers
+  - Only the instruction at pending_result_pc may consume pending_result.
+    Any other dispatched instruction (including a branch landing on a
+    non-move-result target) clears all three pending_result_* fields.
+  - Void invokes / void external misses leave pending_result = None.
+  - DalvikVM.run() clears pending_result_* at entry.
+  - Producers (stub, return-from-internal-callee, external non-void miss)
+    set pending_result_pc = uoff of the instruction that must consume it
+    (i.e. the invoke's next_pc, or the caller's return_pc on internal return).
+  - move-result*: reads pending_result, stores in register, clears all
+    pending_result_* fields.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ class VMState:
     call_stack: List[CallFrame] = field(default_factory=list)
     pending_result: Optional[Union[int, str]] = None
     pending_result_is_wide: bool = False
+    pending_result_pc: Optional[int] = None
     # heap handle of an exception object whose catch handler is about to
     # run; consumed by `move-exception`. Set by the engine when a _ThrowSignal
     # matches a catch entry; cleared by move-exception (and by the engine on
