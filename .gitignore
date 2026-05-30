@@ -104,3 +104,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# Generated DEX fixtures (rebuilt at pytest session start from tools/gen_*_fixture.py)
+tests/fixtures/samples/*.dex
