@@ -5,7 +5,7 @@
 """
 Parser-level tests for try_item + encoded_catch_handler decoding.
 
-Uses the P5a fixture as ground truth: one method (divCatch), one try region
+Uses the try_catch fixture as ground truth: one method (divCatch), one try region
 covering pc 0..2, one typed catch (ArithmeticException) at pc=3.
 """
 
@@ -22,7 +22,7 @@ from dextrace.core.dex_resolver import DexResolver
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "samples" / "try_catch.dex"
 )
-ENTRY = "Lp5a;->divCatch(II)I"
+ENTRY = "LTryCatchTest;->divCatch(II)I"
 
 
 @pytest.fixture(scope="module")
