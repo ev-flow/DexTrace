@@ -149,19 +149,22 @@ def build_const_return_dex() -> (
     def map_item(t: int, size: int, offset: int) -> bytes:
         return struct.pack("<HHII", t, 0, size, offset)
 
+    # map_list entries must be sorted by file offset per the DEX spec.
+    map_entries = [
+        (0x0000, 1, 0),  # header_item
+        (0x0001, len(strings), string_ids_off),  # string_id_item
+        (0x0002, len(type_string_ids), type_ids_off),  # type_id_item
+        (0x0003, len(proto_ids), proto_ids_off),  # proto_id_item
+        (0x0005, len(method_ids), method_ids_off),  # method_id_item
+        (0x0006, 1, class_defs_off),  # class_def_item
+        (0x2001, 1, code_item_off),  # code_item
+        (0x2000, 1, class_data_off_val),  # class_data_item
+        (0x2002, len(strings), string_data_offs[0]),  # string_data_item
+        (0x1000, 1, map_off),  # map_list
+    ]
     map_items = [
-        map_item(0x0000, 1, 0),  # header_item
-        map_item(0x0001, len(strings), string_ids_off),  # string_id_item
-        map_item(0x0002, len(type_string_ids), type_ids_off),  # type_id_item
-        map_item(0x0003, len(proto_ids), proto_ids_off),  # proto_id_item
-        map_item(0x0005, len(method_ids), method_ids_off),  # method_id_item
-        map_item(0x0006, 1, class_defs_off),  # class_def_item
-        map_item(0x2001, 1, code_item_off),  # code_item
-        map_item(0x2000, 1, class_data_off_val),  # class_data_item
-        map_item(
-            0x2002, len(strings), string_data_offs[0]
-        ),  # string_data_item
-        map_item(0x1000, 1, map_off),  # map_list
+        map_item(type_code, count, offset)
+        for type_code, count, offset in sorted(map_entries, key=lambda e: e[2])
     ]
     data.extend(struct.pack("<I", len(map_items)) + b"".join(map_items))
 
