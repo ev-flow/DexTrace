@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=duplicate-code  # gen_p1/p2/p3/p5a share DEX builder boilerplate intentionally
+# pylint: disable=duplicate-code  # fixture generators share DEX builder boilerplate intentionally
 """
 Build tests/fixtures/samples/try_catch.dex programmatically.
 
 Method:
-  Lp5a;->divCatch(II)I  (static)
+  LTryCatchTest;->divCatch(II)I  (static)
     try   { return v2 / v3 }
     catch (Ljava/lang/ArithmeticException;) { return -1 }
 
 Verification:
   python -m dextrace run tests/fixtures/samples/try_catch.dex \\
-      --entry 'Lp5a;->divCatch(II)I' --arg 10 --arg 0
+      --entry 'LTryCatchTest;->divCatch(II)I' --arg 10 --arg 0
   # → return: -1
 """
 
@@ -63,25 +63,25 @@ def build_try_catch_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-
     # Strings (sorted by MUTF-8 code point)
     #  0: "I"
     #  1: "III"                            (shorty for (II)I)
-    #  2: "Ljava/lang/ArithmeticException;"
-    #  3: "Ljava/lang/Object;"
-    #  4: "Lp5a;"
+    #  2: "LTryCatchTest;"
+    #  3: "Ljava/lang/ArithmeticException;"
+    #  4: "Ljava/lang/Object;"
     #  5: "divCatch"
     # -----------------------------------------------------------------------
     strings = [
         "I",
         "III",
+        "LTryCatchTest;",
         "Ljava/lang/ArithmeticException;",
         "Ljava/lang/Object;",
-        "Lp5a;",
         "divCatch",
     ]
 
     # type_ids (sorted by string_idx)
     #  type 0 → str 0  "I"
-    #  type 1 → str 2  "Ljava/lang/ArithmeticException;"
-    #  type 2 → str 3  "Ljava/lang/Object;"
-    #  type 3 → str 4  "Lp5a;"
+    #  type 1 → str 2  "LTryCatchTest;"
+    #  type 2 → str 3  "Ljava/lang/ArithmeticException;"
+    #  type 3 → str 4  "Ljava/lang/Object;"
     type_string_ids = [0, 2, 3, 4]
 
     # proto_ids
@@ -90,8 +90,8 @@ def build_try_catch_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-
     protos = [(1, 0)]  # (shorty_idx, return_type_idx)
 
     # method_ids (sorted by class_idx, then name_idx, then proto_idx)
-    #  method 0: Lp5a;->divCatch(II)I  class=type3, name=str5, proto=0
-    method_ids = [(3, 0, 5)]
+    #  method 0: LTryCatchTest;->divCatch(II)I  class=type1, name=str5, proto=0
+    method_ids = [(1, 0, 5)]
 
     # -----------------------------------------------------------------------
     # divCatch insns (6 code units)
@@ -117,7 +117,7 @@ def build_try_catch_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-
     #   uleb128 size=1                 ← 1 byte
     #   encoded_catch_handler at +1:
     #     sleb128 typed_size=1         ← one typed catch, no catch-all
-    #     uleb128 type_idx=1           ← Ljava/lang/ArithmeticException;
+    #     uleb128 type_idx=2           ← Ljava/lang/ArithmeticException;
     #     uleb128 addr=3               ← move-exception at pc=0x0003
     # try_item.handler_off is the BYTE offset from the start of the list to
     # the encoded_catch_handler — so 1, not 0 (offset 0 is the size byte).
@@ -126,7 +126,7 @@ def build_try_catch_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-
     handlers_list = bytes(
         handlers_size_uleb
         + _sleb128(1)
-        + _uleb128(1)
+        + _uleb128(2)
         + _uleb128(3)
     )
 
@@ -190,7 +190,7 @@ def build_try_catch_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-
     data.extend(try_item)
     data.extend(handlers_list)
 
-    # class_data for Lp5a;
+    # class_data for LTryCatchTest;
     #   direct: method 0 (divCatch)  diff=0, acc=ACC_PUBLIC|ACC_STATIC
     ACC_PUBLIC = 0x1
     ACC_STATIC = 0x8
@@ -249,12 +249,12 @@ def build_try_catch_dex() -> bytes:  # pylint: disable=too-many-locals,too-many-
         for cls_idx, proto_idx, name_idx in method_ids
     )
 
-    # class_def for Lp5a;: class=3, super=2 (Object), data=class_data_off
+    # class_def for LTryCatchTest;: class=type1, super=type3 (Object), data=class_data_off
     class_def_items = struct.pack(
         "<IIIIIIII",
-        3,                # class_idx
+        1,                # class_idx (LTryCatchTest)
         ACC_PUBLIC,       # access_flags
-        2,                # superclass_idx (Object)
+        3,                # superclass_idx (Object)
         0,                # interfaces_off
         0xFFFFFFFF,       # source_file_idx
         0,                # annotations_off
@@ -319,8 +319,7 @@ if __name__ == "__main__":
         Path(__file__).parent.parent
         / "tests"
         / "fixtures"
-        / "samples"
-        / "try_catch.dex"
+        / "samples" / "try_catch.dex"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(dex)
