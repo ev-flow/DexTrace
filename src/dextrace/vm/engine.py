@@ -645,9 +645,28 @@ class DalvikVM:
                 f"invoke at pc={insn.uoff:#06x}: missing method signature"
             )
 
-        # stub-first dispatch. Registry is keyed by the static (compile-time)
-        # callee signature, so it sits in front of both vtable resolution and
-        # the external-miss path.
+        # Receiver validation must precede stub dispatch: Dalvik/JVM semantics
+        # require invoke-virtual / invoke-interface to raise NPE on a null
+        # receiver before the callee is invoked, even when a stub is registered.
+        is_virtual_dispatch = mnemonic in (
+            "invoke-virtual",
+            "invoke-virtual/range",
+            "invoke-interface",
+            "invoke-interface/range",
+        )
+
+        runtime_desc: Optional[str] = None
+        if is_virtual_dispatch:
+            receiver_handle = state.registers.get(reg_index(insn.regs[0]))
+            if receiver_handle == 0:
+                raise DexTraceVMError(
+                    f"null receiver: {mnemonic} at pc={insn.uoff:#06x}"
+                )
+            runtime_desc = self._heap.get_class(receiver_handle)
+
+        # Stub dispatch is keyed by the static (compile-time) callee signature
+        # and sits in front of both vtable resolution and the external-miss
+        # path — but only after receiver validation above.
         stub = self._stub_registry.get(callee_sig)
         if stub is not None:
             self._invoke_stub(stub, callee_sig, insn, state)
@@ -656,20 +675,8 @@ class DalvikVM:
         # invoke-interface uses the same runtime-class vtable lookup as
         # invoke-virtual. Java semantics require the runtime class implements
         # the interface, so (name, proto) will be present in its vtable.
-        if mnemonic in (
-            "invoke-virtual",
-            "invoke-virtual/range",
-            "invoke-interface",
-            "invoke-interface/range",
-        ):
-            # Vtable dispatch: resolve to runtime class's implementation.
-            receiver_handle = state.registers.get(reg_index(insn.regs[0]))
-            if receiver_handle == 0:
-                raise DexTraceVMError(
-                    f"null receiver: {mnemonic} at pc={insn.uoff:#06x}"
-                )
-            runtime_desc = self._heap.get_class(receiver_handle)
-
+        if is_virtual_dispatch:
+            assert runtime_desc is not None
             # invoke-virtual on an external (no-stub) class falls through
             # to the external-miss policy instead of raising a vtable miss.
             if not self._hierarchy.has_class(runtime_desc):
