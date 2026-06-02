@@ -295,18 +295,22 @@ def build_inheritance_dex() -> bytes:  # pylint: disable=too-many-locals,too-man
     def _map_item(type_code, count, offset):
         return struct.pack("<HHII", type_code, 0, count, offset)
 
-    # map_list items (must be sorted by type code, ascending)
+    # map_list entries must be sorted by file offset per the DEX spec.
+    map_entries = [
+        (0x0000, 1, 0),                              # header_item
+        (0x0001, len(strings), string_ids_off),      # string_id_item
+        (0x0002, len(type_string_ids), type_ids_off),# type_id_item
+        (0x0003, len(protos), proto_ids_off),         # proto_id_item
+        (0x0005, len(method_ids), method_ids_off),   # method_id_item
+        (0x0006, 3, class_defs_off),                  # class_def_item
+        (0x2000, 3, base_class_data_off),             # class_data_item
+        (0x2001, 6, base_init_off),                   # code_item (6 total)
+        (0x2002, len(strings), string_data_offs[0]), # string_data_item
+        (0x1000, 1, map_off),                         # map_list
+    ]
     map_items = [
-        _map_item(0x0000, 1, 0),                              # header_item
-        _map_item(0x0001, len(strings), string_ids_off),      # string_id_item
-        _map_item(0x0002, len(type_string_ids), type_ids_off),# type_id_item
-        _map_item(0x0003, len(protos), proto_ids_off),         # proto_id_item
-        _map_item(0x0005, len(method_ids), method_ids_off),   # method_id_item
-        _map_item(0x0006, 3, class_defs_off),                  # class_def_item
-        _map_item(0x2000, 3, base_class_data_off),             # class_data_item
-        _map_item(0x2001, 6, base_init_off),                   # code_item (6 total)
-        _map_item(0x2002, len(strings), string_data_offs[0]), # string_data_item
-        _map_item(0x1000, 1, map_off),                         # map_list
+        _map_item(type_code, count, offset)
+        for type_code, count, offset in sorted(map_entries, key=lambda e: e[2])
     ]
     data.extend(struct.pack("<I", len(map_items)) + b"".join(map_items))
 
