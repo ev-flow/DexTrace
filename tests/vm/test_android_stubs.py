@@ -15,6 +15,10 @@ from dextrace.vm.android_stubs import (
     Value,
     Wide,
 )
+from dextrace.vm.android_stubs.content import (
+    stub_connectivity_get_active_network_info,
+    stub_network_info_get_type,
+)
 from dextrace.vm.android_stubs.sms import (
     _GET_DEFAULT_SIG,
     _SEND_TEXT_MESSAGE_SIG,
@@ -120,3 +124,77 @@ class TestSmsSendTextMessage:
             [receiver, bogus_handle, 0, bogus_handle, 0, 0], heap, trace
         )
         assert trace[0]["args"] == [None, None, None]
+
+
+# UpdateService extends Service extends Context: real samples reference these
+# inherited Context methods with the service class as owner. A virtual-resolve
+# miss routes to the external-miss policy, which raises for these non-void calls,
+# so the registry must carry the owner-qualified aliases (PR #8 review #1).
+_UPDATE_SVC = "Lcom/google/update/UpdateService;"
+
+
+class TestInheritedContextAliases:
+    def test_update_service_start_service_registered(self):
+        sig = (
+            f"{_UPDATE_SVC}->startService(Landroid/content/Intent;)"
+            "Landroid/content/ComponentName;"
+        )
+        assert sig in REGISTRY and callable(REGISTRY[sig])
+
+    def test_update_service_open_file_output_registered(self):
+        sig = (
+            f"{_UPDATE_SVC}->openFileOutput(Ljava/lang/String;I)"
+            "Ljava/io/FileOutputStream;"
+        )
+        assert sig in REGISTRY and callable(REGISTRY[sig])
+
+    def test_update_service_get_file_stream_path_registered(self):
+        sig = (
+            f"{_UPDATE_SVC}->getFileStreamPath(Ljava/lang/String;)"
+            "Ljava/io/File;"
+        )
+        assert sig in REGISTRY and callable(REGISTRY[sig])
+
+    def test_update_service_register_receiver_registered(self):
+        sig = (
+            f"{_UPDATE_SVC}->registerReceiver("
+            "Landroid/content/BroadcastReceiver;"
+            "Landroid/content/IntentFilter;)Landroid/content/Intent;"
+        )
+        assert sig in REGISTRY and callable(REGISTRY[sig])
+
+    def test_update_service_alias_shares_context_stub(self):
+        # The alias must dispatch to the same callable as the Context owner so
+        # behavior (and trace output) stays identical regardless of owner.
+        ctx_sig = (
+            "Landroid/content/Context;->startService(Landroid/content/Intent;)"
+            "Landroid/content/ComponentName;"
+        )
+        svc_sig = (
+            f"{_UPDATE_SVC}->startService(Landroid/content/Intent;)"
+            "Landroid/content/ComponentName;"
+        )
+        assert REGISTRY[svc_sig] is REGISTRY[ctx_sig]
+
+
+class TestNetworkInfoGetType:
+    def test_get_type_matches_active_network_info_state(self):
+        # getType() must report the same type the fake NetworkInfo was created
+        # with (type=1, WiFi) rather than a hardcoded constant (PR #8 review #2).
+        heap = ObjectHeap()
+        trace: list = []
+        info = stub_connectivity_get_active_network_info([], heap, trace)
+        assert isinstance(info, ObjectRef)
+        stored = heap.get_value(info.handle)
+        result = stub_network_info_get_type([info.handle], heap, trace)
+        assert isinstance(result, Value)
+        assert result.value == stored["type"]
+        assert trace[-1]["return"]["value"] == stored["type"]
+
+    def test_get_type_defaults_to_zero_without_stored_state(self):
+        # No stored dict (or null receiver) must not raise; defaults to 0.
+        heap = ObjectHeap()
+        bare = heap.allocate("Landroid/net/NetworkInfo;")
+        assert stub_network_info_get_type([bare], heap, []).value == 0
+        assert stub_network_info_get_type([0], heap, []).value == 0
+        assert stub_network_info_get_type([], heap, []).value == 0

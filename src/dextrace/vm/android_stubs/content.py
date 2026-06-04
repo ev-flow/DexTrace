@@ -247,15 +247,28 @@ def stub_network_info_is_connected(
 def stub_network_info_get_type(
     args: List[Any], heap, trace: List[Dict[str, Any]]
 ) -> StubResult:
-    """NetworkInfo.getType()I — returns 0 (TYPE_MOBILE)."""
+    """NetworkInfo.getType()I — returns the receiver's stored 'type'.
+
+    getActiveNetworkInfo() stores {"connected": ..., "type": N} on the
+    NetworkInfo handle, so getType() must read it back instead of returning a
+    fixed value — otherwise the same fake object reports a different network
+    type than it was created with, which can send analysis down the wrong
+    mobile-vs-WiFi branch. Defaults to 0 (TYPE_MOBILE) when unset/null.
+    """
+    value = 0
+    # heap.get_value raises on a null/invalid handle, so guard args[0] first.
+    if args and args[0]:
+        info = heap.get_value(args[0])
+        if isinstance(info, dict):
+            value = int(info.get("type", 0))
     trace.append(
         {
             "api": f"{_NET_INFO}->getType()I",
             "args": [],
-            "return": {"kind": "int", "value": 0},
+            "return": {"kind": "int", "value": value},
         }
     )
-    return Value(0)
+    return Value(value)
 
 
 def stub_network_info_get_extra_info(

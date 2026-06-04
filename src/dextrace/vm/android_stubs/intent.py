@@ -231,3 +231,20 @@ register(
     "Landroid/content/Context;->openFileOutput(Ljava/lang/String;I)Ljava/io/FileOutputStream;",
     stub_context_open_file_output,
 )
+
+# Inherited-owner aliases: real samples reference these Context methods with the
+# app/service class as owner (e.g. UpdateService extends Service extends Context).
+# The registry matches the static callee signature, and a virtual-resolve miss on
+# an inherited Android method routes to the external-miss policy — which raises
+# DexTraceNotImplementedError for these non-void calls (engine.py). Registering
+# the same stub under the known owner keeps execution going. Mirrors the
+# getSystemService/getContentResolver aliases in content.py.
+_UPDATE_SVC = "Lcom/google/update/UpdateService;"
+register(
+    f"{_UPDATE_SVC}->startService(Landroid/content/Intent;){_COMPONENT}",
+    stub_context_start_service,
+)
+register(
+    f"{_UPDATE_SVC}->openFileOutput(Ljava/lang/String;I){_FOS}",
+    stub_context_open_file_output,
+)

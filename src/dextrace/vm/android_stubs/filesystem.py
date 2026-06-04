@@ -710,6 +710,21 @@ register(
     stub_context_register_receiver,
 )
 
+# Inherited-owner aliases: samples reference these inherited Context methods with
+# the service class as owner. A virtual-resolve miss on the inherited method hits
+# the external-miss policy, which raises for these non-void calls — so register
+# the stubs under the known owner too (see content.py / intent.py for the pattern).
+_UPDATE_SVC = "Lcom/google/update/UpdateService;"
+register(
+    f"{_UPDATE_SVC}->getFileStreamPath(Ljava/lang/String;){_FILE}",
+    stub_context_get_file_stream_path,
+)
+register(
+    f"{_UPDATE_SVC}->registerReceiver("
+    f"Landroid/content/BroadcastReceiver;{_INTENT_FILTER}){_INTENT}",
+    stub_context_register_receiver,
+)
+
 register(f"{_NOTIFICATION}-><init>()V", stub_notification_init)
 register(
     f"{_NOTIFICATION}->setLatestEventInfo("
