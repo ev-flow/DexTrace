@@ -39,7 +39,7 @@ from __future__ import annotations
 from dextrace.dalvik.types import DecodedInsn
 from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.heap import ObjectHeap
-from dextrace.vm.int_ops import reg_index
+from dextrace.vm.int_ops import i8, i16, reg_index, u1, u16
 from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.state import VMState
 
@@ -99,6 +99,10 @@ def register(eval_table: dict, heap: ObjectHeap) -> None:
             arr[i] = state.registers.get(reg_index(r))
         state.pending_result = handle
         state.pending_result_is_wide = False
+        # Mark the consumer pc (the immediately following move-result-object) so
+        # the engine's stale-result guard can enforce the pending-result
+        # invariant. next_pc convention: uoff + size_units (see engine.py).
+        state.pending_result_pc = insn.uoff + insn.size_units
 
     # ------------------------------------------------------------------
     # aget / aput families
@@ -115,6 +119,19 @@ def register(eval_table: dict, heap: ObjectHeap) -> None:
         idx = state.registers.get(reg_index(insn.regs[2]))
         _check_index(arr, idx)
         state.registers.set(reg_index(insn.regs[0]), int(arr[idx]))
+
+    def _make_aget(width):
+        """Build a typed aget that narrows the loaded element to `width`."""
+
+        def _h(insn: DecodedInsn, state: VMState) -> None:
+            handle = state.registers.get(reg_index(insn.regs[1]))
+            _check_array(handle)
+            arr = heap.get_array(handle)
+            idx = state.registers.get(reg_index(insn.regs[2]))
+            _check_index(arr, idx)
+            state.registers.set(reg_index(insn.regs[0]), width(int(arr[idx])))
+
+        return _h
 
     def _aget_wide(insn: DecodedInsn, state: VMState) -> None:
         handle = state.registers.get(reg_index(insn.regs[1]))
@@ -145,13 +162,15 @@ def register(eval_table: dict, heap: ObjectHeap) -> None:
     eval_table["filled-new-array"] = handle_filled_new_array
     eval_table["filled-new-array/range"] = handle_filled_new_array
 
-    # Narrow + object + 4 typed primitive widths share _aget; -wide is its own.
+    # Narrow + object share generic _aget; typed primitive widths each narrow
+    # the loaded element (byte/short sign-extend, char zero-extends, boolean
+    # normalizes); -wide is its own.
     eval_table["aget"] = _aget
     eval_table["aget-object"] = _aget
-    eval_table["aget-boolean"] = _aget
-    eval_table["aget-byte"] = _aget
-    eval_table["aget-char"] = _aget
-    eval_table["aget-short"] = _aget
+    eval_table["aget-boolean"] = _make_aget(u1)
+    eval_table["aget-byte"] = _make_aget(i8)
+    eval_table["aget-char"] = _make_aget(u16)
+    eval_table["aget-short"] = _make_aget(i16)
     eval_table["aget-wide"] = _aget_wide
 
     eval_table["aput"] = _aput

@@ -81,6 +81,16 @@ class TestShiftSemantics:
         handle_ushr_int(insn, state)
         assert state.registers.get(0) == 0x7FFF_FFFF
 
+    def test_ushr_zero_shift_keeps_signed_value(self):
+        """ushr-int -1 >>> 0 == -1: a 0-bit shift must leave the register as the
+        signed 32-bit value, not the unsigned 0xFFFFFFFF."""
+        state = _make_state(0, 0, 0)
+        state.registers.set(1, -1)  # all bits set
+        state.registers.set(2, 0)  # shift count 0
+        insn = _make_insn(["v0", "v1", "v2"])
+        handle_ushr_int(insn, state)
+        assert state.registers.get(0) == -1
+
 
 class TestDivisionErrors:
     def test_div_by_zero_raises_arithmetic_exception(self):

@@ -23,6 +23,7 @@ from dextrace.vm.engine import DalvikVM
 from dextrace.vm.errors import DexTraceVMError
 from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.handlers import arithmetic, branch, compare, move, type_conv
+from dextrace.vm.int_ops import i64
 from dextrace.vm.register_file import RegisterFile
 from dextrace.vm.state import VMState
 
@@ -517,6 +518,55 @@ class TestTypeConv:
         bits = state.registers.get(0)
         val = struct.unpack(">f", struct.pack(">I", bits & 0xFFFF_FFFF))[0]
         assert abs(val - 2.5) < 1e-6
+
+    # --- Saturation: NaN / Infinity / finite overflow (Java/Dalvik f2i/d2i) ---
+    # Python int() raises on NaN/Inf and wraps finite overflow; these pin the
+    # Dalvik-faithful saturating behavior so the VM never crashes on float->int.
+
+    def test_float_to_int_nan_is_zero(self) -> None:
+        state = _state(0, _float_bits(float("nan")))
+        type_conv.handle_float_to_int(_insn(["v0", "v1"]), state)
+        assert state.registers.get(0) == 0
+
+    def test_double_to_int_nan_is_zero(self) -> None:
+        state = _state(size=4)
+        state.registers.set_wide(1, _double_bits(float("nan")))
+        type_conv.handle_double_to_int(_insn(["v0", "v1"]), state)
+        assert state.registers.get(0) == 0
+
+    def test_float_to_int_pos_inf_saturates(self) -> None:
+        state = _state(0, _float_bits(float("inf")))
+        type_conv.handle_float_to_int(_insn(["v0", "v1"]), state)
+        assert state.registers.get(0) == 2147483647
+
+    def test_float_to_int_neg_inf_saturates(self) -> None:
+        state = _state(0, _float_bits(float("-inf")))
+        type_conv.handle_float_to_int(_insn(["v0", "v1"]), state)
+        assert state.registers.get(0) == -2147483648
+
+    def test_float_to_int_finite_overflow_saturates(self) -> None:
+        # 1e30 is finite but far outside int range; Java saturates to MAX_INT
+        # rather than wrapping modularly the way Python int() + mask would.
+        state = _state(0, _float_bits(1e30))
+        type_conv.handle_float_to_int(_insn(["v0", "v1"]), state)
+        assert state.registers.get(0) == 2147483647
+
+    def test_double_to_long_pos_inf_saturates(self) -> None:
+        state = _state(size=4)
+        state.registers.set_wide(1, _double_bits(float("inf")))
+        type_conv.handle_double_to_long(_insn(["v0", "v1"]), state)
+        assert i64(state.registers.get_wide(0)) == 2**63 - 1
+
+    def test_double_to_long_neg_inf_saturates(self) -> None:
+        state = _state(size=4)
+        state.registers.set_wide(1, _double_bits(float("-inf")))
+        type_conv.handle_double_to_long(_insn(["v0", "v1"]), state)
+        assert i64(state.registers.get_wide(0)) == -(2**63)
+
+    def test_float_to_long_nan_is_zero(self) -> None:
+        state = _state(0, _float_bits(float("nan")))
+        type_conv.handle_float_to_long(_insn(["v0", "v1"]), state)
+        assert state.registers.get_wide(0) == 0
 
 
 # ---------------------------------------------------------------------------

@@ -26,11 +26,11 @@ Null receiver semantics:
   with NullPointerException so an in-method catch can handle it.
   Mirrors the JVM behavior monitor-* already uses in type_check.py.
 
-The 7 typed primitive widths (boolean/byte/char/short) do not mask on
-read or write: the writer of the field has already produced a properly
-masked Python int (const/16, arithmetic, etc.), and Dalvik registers
-hold sign-extended 32-bit values. Adding a second mask here would only
-hide bugs in the producing code.
+Typed primitive widths (boolean/byte/char/short) narrow on read: the
+typed iget/sget opcode defines the visible element width, so byte/short
+sign-extend, char zero-extends, and boolean normalizes to 0/1 (see the
+width helpers in int_ops.py). The store keeps the raw int; narrowing the
+producer cannot do (a valid 32-bit int like 255 is not a valid byte).
 
 `_stub` is preserved at module scope: an existing regression test
 (tests/vm/test_arithmetic.py) calls it directly to verify the
@@ -45,7 +45,7 @@ from typing import Any, Dict
 from dextrace.dalvik.types import DecodedInsn
 from dextrace.vm.errors import DexTraceNotImplementedError, DexTraceVMError
 from dextrace.vm.heap import ObjectHeap
-from dextrace.vm.int_ops import reg_index
+from dextrace.vm.int_ops import i8, i16, reg_index, u1, u16
 from dextrace.vm.signals import _ThrowSignal
 from dextrace.vm.state import VMState
 
@@ -106,6 +106,18 @@ def register(
         val = state.registers.get_wide(reg_index(insn.regs[0]))
         heap.set_instance_field(receiver, _field_sig(insn), val)
 
+    def _make_iget(width):
+        """Build a typed iget that narrows the loaded field value to `width`."""
+
+        def _h(insn: DecodedInsn, state: VMState) -> None:
+            receiver = state.registers.get(reg_index(insn.regs[1]))
+            if receiver == 0:
+                raise _ThrowSignal("Ljava/lang/NullPointerException;", 0)
+            val = heap.get_instance_field(receiver, _field_sig(insn), default=0)
+            state.registers.set(reg_index(insn.regs[0]), width(int(val)))
+
+        return _h
+
     # ------------------------------------------------------------------
     # Static fields (sget / sput families)
     # sget vAA, field@BBBB         → AA = static[field]
@@ -128,13 +140,23 @@ def register(
         val = state.registers.get_wide(reg_index(insn.regs[0]))
         static_fields[_field_sig(insn)] = val
 
-    # iget*: narrow / object variants share _iget; -wide gets _iget_wide.
+    def _make_sget(width):
+        """Build a typed sget that narrows the loaded static value to `width`."""
+
+        def _h(insn: DecodedInsn, state: VMState) -> None:
+            val = static_fields.get(_field_sig(insn), 0)
+            state.registers.set(reg_index(insn.regs[0]), width(int(val)))
+
+        return _h
+
+    # iget*: narrow / object variants share _iget; typed widths narrow on read
+    # (byte/short sign-extend, char zero-extends, boolean 0/1); -wide is its own.
     eval_table["iget"] = _iget
     eval_table["iget-object"] = _iget
-    eval_table["iget-boolean"] = _iget
-    eval_table["iget-byte"] = _iget
-    eval_table["iget-char"] = _iget
-    eval_table["iget-short"] = _iget
+    eval_table["iget-boolean"] = _make_iget(u1)
+    eval_table["iget-byte"] = _make_iget(i8)
+    eval_table["iget-char"] = _make_iget(u16)
+    eval_table["iget-short"] = _make_iget(i16)
     eval_table["iget-wide"] = _iget_wide
 
     eval_table["iput"] = _iput
@@ -147,10 +169,10 @@ def register(
 
     eval_table["sget"] = _sget
     eval_table["sget-object"] = _sget
-    eval_table["sget-boolean"] = _sget
-    eval_table["sget-byte"] = _sget
-    eval_table["sget-char"] = _sget
-    eval_table["sget-short"] = _sget
+    eval_table["sget-boolean"] = _make_sget(u1)
+    eval_table["sget-byte"] = _make_sget(i8)
+    eval_table["sget-char"] = _make_sget(u16)
+    eval_table["sget-short"] = _make_sget(i16)
     eval_table["sget-wide"] = _sget_wide
 
     eval_table["sput"] = _sput

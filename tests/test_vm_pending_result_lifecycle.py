@@ -38,6 +38,9 @@ from dextrace.vm.android_stubs import (
 )
 from dextrace.vm.engine import DalvikVM
 from dextrace.vm.errors import DexTraceNotImplementedError
+from dextrace.vm.handlers import array as array_handlers
+from dextrace.vm.handlers import move as move_handlers
+from dextrace.vm.heap import ObjectHeap
 from dextrace.vm.register_file import RegisterFile
 from dextrace.vm.state import VMState
 
@@ -218,3 +221,95 @@ class TestExistingScaffoldStillRuns:
         vm = _vm()
         result = vm.run("Lcom/example/ConstReturn;->main()I", args=[])
         assert result == 42
+
+
+def _filled_new_array_insn(uoff=0x10, size_units=3, regs=("v0", "v1")):
+    """A filled-new-array {vC..vG}, [I (35c) shaped DecodedInsn."""
+    return DecodedInsn(
+        uoff=uoff,
+        byte_off=uoff * 2,
+        opcode=0x24,
+        mnemonic="filled-new-array",
+        fmt="35c",
+        size_units=size_units,
+        regs=list(regs),
+        param="[I",
+    )
+
+
+def _array_handlers():
+    """Register array handlers against a fresh heap; return (table, heap)."""
+    table: dict = {}
+    heap = ObjectHeap()
+    array_handlers.register(table, heap)
+    move_handlers.register(table)
+    return table, heap
+
+
+class TestFilledNewArrayPendingResult:
+    """filled-new-array is a pending-result producer and must obey the same
+    consumer-pc invariant as invoke* (regression for PR #7 review #1)."""
+
+    def test_filled_new_array_sets_consumer_pc(self):
+        table, _heap = _array_handlers()
+        state = VMState(registers=RegisterFile(2), pc=0)
+        state.registers.set(0, 11)
+        state.registers.set(1, 22)
+        insn = _filled_new_array_insn(uoff=0x40, size_units=3)
+
+        table["filled-new-array"](insn, state)
+
+        assert state.pending_result is not None
+        assert state.pending_result_is_wide is False
+        # next_pc convention: uoff + size_units
+        assert state.pending_result_pc == 0x40 + 3
+
+    def test_move_result_object_consumes_and_clears_pc(self):
+        table, _heap = _array_handlers()
+        state = VMState(registers=RegisterFile(2), pc=0)
+        state.registers.set(0, 11)
+        state.registers.set(1, 22)
+        produce = _filled_new_array_insn(uoff=0x40, size_units=3)
+        table["filled-new-array"](produce, state)
+        handle = state.pending_result
+
+        consume = DecodedInsn(
+            uoff=0x43,
+            byte_off=0x43 * 2,
+            opcode=0x0C,
+            mnemonic="move-result-object",
+            fmt="11x",
+            size_units=1,
+            regs=["v0"],
+            param=None,
+        )
+        table["move-result-object"](consume, state)
+
+        assert state.registers.get(0) == handle
+        assert state.pending_result is None
+        assert state.pending_result_is_wide is False
+        assert state.pending_result_pc is None
+
+    def test_stale_guard_clears_when_consumer_pc_missed(self):
+        """If control lands somewhere other than the consumer pc, the engine's
+        stale-result guard predicate clears the filled-new-array result so a
+        non-adjacent move-result-object cannot pick it up."""
+        table, _heap = _array_handlers()
+        state = VMState(registers=RegisterFile(2), pc=0)
+        state.registers.set(0, 11)
+        state.registers.set(1, 22)
+        insn = _filled_new_array_insn(uoff=0x40, size_units=3)
+        table["filled-new-array"](insn, state)
+
+        state.pc = 0x50  # not the expected consumer (0x43)
+        if (
+            state.pending_result is not None
+            and state.pending_result_pc is not None
+            and state.pc != state.pending_result_pc
+        ):
+            state.pending_result = None
+            state.pending_result_is_wide = False
+            state.pending_result_pc = None
+
+        assert state.pending_result is None
+        assert state.pending_result_pc is None
