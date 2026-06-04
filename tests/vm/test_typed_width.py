@@ -74,6 +74,16 @@ def _ifield_roundtrip(put_op, get_op, value, sig):
     return state.registers.get(2)
 
 
+def _sfield_roundtrip(put_op, get_op, value, sig):
+    # sput/sget share the static_fields dict captured by register().
+    table, _heap = _field_table()
+    state = VMState(registers=RegisterFile(4), pc=0)
+    state.registers.set(0, value)  # value
+    table[put_op](_insn(["v0"], param=sig), state)
+    table[get_op](_insn(["v1"], param=sig), state)
+    return state.registers.get(1)
+
+
 class TestTypedArrayWidths:
     def test_byte_sign_extends(self):
         assert _array_roundtrip("[B", "aput-byte", "aget-byte", 255) == -1
@@ -123,5 +133,32 @@ class TestTypedInstanceFieldWidths:
     def test_plain_iget_roundtrips_unchanged(self):
         assert (
             _ifield_roundtrip("iput", "iget", 0x1234_5678, "LFoo;->i:I")
+            == 0x1234_5678
+        )
+
+
+class TestTypedStaticFieldWidths:
+    def test_byte_sign_extends(self):
+        assert _sfield_roundtrip("sput-byte", "sget-byte", 255, "LFoo;->b:B") == -1
+
+    def test_short_sign_extends(self):
+        assert (
+            _sfield_roundtrip("sput-short", "sget-short", 0xFFFF, "LFoo;->s:S") == -1
+        )
+
+    def test_char_zero_extends(self):
+        assert (
+            _sfield_roundtrip("sput-char", "sget-char", -1, "LFoo;->c:C") == 65535
+        )
+
+    def test_boolean_low_bit_set(self):
+        assert _sfield_roundtrip("sput-boolean", "sget-boolean", 3, "LFoo;->z:Z") == 1
+
+    def test_boolean_even_is_zero(self):
+        assert _sfield_roundtrip("sput-boolean", "sget-boolean", 2, "LFoo;->z:Z") == 0
+
+    def test_plain_sget_roundtrips_unchanged(self):
+        assert (
+            _sfield_roundtrip("sput", "sget", 0x1234_5678, "LFoo;->i:I")
             == 0x1234_5678
         )

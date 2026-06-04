@@ -568,6 +568,22 @@ class TestTypeConv:
         type_conv.handle_float_to_long(_insn(["v0", "v1"]), state)
         assert state.registers.get_wide(0) == 0
 
+    def test_double_to_long_nan_is_zero(self) -> None:
+        state = _state(size=4)
+        state.registers.set_wide(1, _double_bits(float("nan")))
+        type_conv.handle_double_to_long(_insn(["v0", "v1"]), state)
+        assert state.registers.get_wide(0) == 0
+
+    def test_float_to_long_pos_inf_saturates(self) -> None:
+        state = _state(0, _float_bits(float("inf")), size=4)
+        type_conv.handle_float_to_long(_insn(["v0", "v1"]), state)
+        assert i64(state.registers.get_wide(0)) == 2**63 - 1
+
+    def test_float_to_long_neg_inf_saturates(self) -> None:
+        state = _state(0, _float_bits(float("-inf")), size=4)
+        type_conv.handle_float_to_long(_insn(["v0", "v1"]), state)
+        assert i64(state.registers.get_wide(0)) == -(2**63)
+
 
 # ---------------------------------------------------------------------------
 # Move and move-result variants
