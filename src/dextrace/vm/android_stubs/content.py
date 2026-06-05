@@ -253,10 +253,13 @@ def stub_network_info_get_type(
     NetworkInfo handle, so getType() must read it back instead of returning a
     fixed value — otherwise the same fake object reports a different network
     type than it was created with, which can send analysis down the wrong
-    mobile-vs-WiFi branch. Defaults to 0 (TYPE_MOBILE) when unset/null.
+    mobile-vs-WiFi branch. The fake object from getActiveNetworkInfo() carries
+    type=1 (TYPE_WIFI), so the normal path returns 1; the 0 (TYPE_MOBILE)
+    fallback applies only when the receiver has no stored type (unset/null).
     """
     value = 0
-    # heap.get_value raises on a null/invalid handle, so guard args[0] first.
+    # heap.get_value raises on the null handle (0), so skip the lookup when the
+    # receiver is null/absent (valid handles start at 1; see heap.py).
     if args and args[0]:
         info = heap.get_value(args[0])
         if isinstance(info, dict):
