@@ -79,4 +79,3 @@ class TestVMRunFibonacci:
         vm = DalvikVM(dex_bytes, resolver, sig_map)
 
         assert vm.run(ENTRY, args=[10]) == 55
-
