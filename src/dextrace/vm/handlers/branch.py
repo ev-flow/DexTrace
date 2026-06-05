@@ -1,0 +1,164 @@
+# -*- coding: utf-8 -*-
+# This file is part of DexTrace - https://github.com/ev-flow/DexTrace
+# See the file 'LICENSE' for copying permission.
+
+"""
+vm/handlers/branch.py — Branch and goto instruction handlers.
+
+Branch opcodes use target_uoff (already computed by the disassembler) rather
+than decoding the raw offset literal ourselves.
+
+Covers:
+  if-eq / if-ne / if-lt / if-ge / if-gt / if-le   (22t, two-register)
+  if-eqz / if-nez / if-ltz / if-gez / if-gtz / if-lez  (21t, one-register vs zero)
+  goto / goto/16 / goto/32
+"""
+
+from __future__ import annotations
+
+from dextrace.dalvik.types import DecodedInsn
+from dextrace.vm.errors import DexTraceVMError
+from dextrace.vm.int_ops import reg_index
+from dextrace.vm.state import VMState
+
+
+def _target(insn: DecodedInsn) -> int:
+    if insn.target_uoff is None:
+        raise DexTraceVMError(
+            f"{insn.mnemonic} at pc={insn.uoff:#06x}: missing branch target"
+        )
+    return insn.target_uoff
+
+# ---------------------------------------------------------------------------
+# Two-register conditionals (22t)
+# ---------------------------------------------------------------------------
+
+
+def handle_if_eq(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    b = state.registers.get(reg_index(insn.regs[1]))
+    if a == b:
+        state.pc = _target(insn)
+
+
+def handle_if_ne(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    b = state.registers.get(reg_index(insn.regs[1]))
+    if a != b:
+        state.pc = _target(insn)
+
+
+def handle_if_lt(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    b = state.registers.get(reg_index(insn.regs[1]))
+    if a < b:
+        state.pc = _target(insn)
+
+
+def handle_if_ge(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    b = state.registers.get(reg_index(insn.regs[1]))
+    if a >= b:
+        state.pc = _target(insn)
+
+
+def handle_if_gt(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    b = state.registers.get(reg_index(insn.regs[1]))
+    if a > b:
+        state.pc = _target(insn)
+
+
+def handle_if_le(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    b = state.registers.get(reg_index(insn.regs[1]))
+    if a <= b:
+        state.pc = _target(insn)
+
+
+# ---------------------------------------------------------------------------
+# One-register-vs-zero conditionals (21t)
+# ---------------------------------------------------------------------------
+
+
+def handle_if_eqz(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    if a == 0:
+        state.pc = _target(insn)
+
+
+def handle_if_nez(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    if a != 0:
+        state.pc = _target(insn)
+
+
+def handle_if_ltz(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    if a < 0:
+        state.pc = _target(insn)
+
+
+def handle_if_gez(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    if a >= 0:
+        state.pc = _target(insn)
+
+
+def handle_if_gtz(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    if a > 0:
+        state.pc = _target(insn)
+
+
+def handle_if_lez(insn: DecodedInsn, state: VMState) -> None:
+    a = state.registers.get(reg_index(insn.regs[0]))
+    if a <= 0:
+        state.pc = _target(insn)
+
+
+# ---------------------------------------------------------------------------
+# Goto (unconditional)
+# ---------------------------------------------------------------------------
+
+
+def handle_goto(insn: DecodedInsn, state: VMState) -> None:
+    state.pc = _target(insn)
+
+
+def handle_goto_16(insn: DecodedInsn, state: VMState) -> None:
+    state.pc = _target(insn)
+
+
+def handle_goto_32(insn: DecodedInsn, state: VMState) -> None:
+    state.pc = _target(insn)
+
+
+# ---------------------------------------------------------------------------
+# Registration
+# ---------------------------------------------------------------------------
+# packed-switch / sparse-switch are not registered here. The engine handles
+# them inline so it can reach the current frame's raw insn bytes (needed to
+# decode the payload table) without leaking the parser into eval handlers.
+
+
+def register(eval_table: dict) -> None:
+    pairs = [
+        ("if-eq", handle_if_eq),
+        ("if-ne", handle_if_ne),
+        ("if-lt", handle_if_lt),
+        ("if-ge", handle_if_ge),
+        ("if-gt", handle_if_gt),
+        ("if-le", handle_if_le),
+        ("if-eqz", handle_if_eqz),
+        ("if-nez", handle_if_nez),
+        ("if-ltz", handle_if_ltz),
+        ("if-gez", handle_if_gez),
+        ("if-gtz", handle_if_gtz),
+        ("if-lez", handle_if_lez),
+        ("goto", handle_goto),
+        ("goto/16", handle_goto_16),
+        ("goto/32", handle_goto_32),
+    ]
+    for name, fn in pairs:
+        eval_table[name] = fn

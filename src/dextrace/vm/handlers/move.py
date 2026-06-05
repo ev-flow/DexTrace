@@ -148,6 +148,7 @@ def handle_move_result(insn: DecodedInsn, state: VMState) -> None:
     val = state.pending_result
     state.pending_result = None
     state.pending_result_is_wide = False
+    state.pending_result_pc = None
     state.registers.set(
         dest, int(val) if not isinstance(val, str) else hash(val) & 0xFFFF_FFFF
     )
@@ -162,6 +163,7 @@ def handle_move_result_wide(insn: DecodedInsn, state: VMState) -> None:
     val = int(state.pending_result)
     state.pending_result = None
     state.pending_result_is_wide = False
+    state.pending_result_pc = None
     state.registers.set_wide(dest, val)
 
 
@@ -173,6 +175,7 @@ def handle_move_result_object(insn: DecodedInsn, state: VMState) -> None:
     val = state.pending_result
     state.pending_result = None
     state.pending_result_is_wide = False
+    state.pending_result_pc = None
     state.registers.set(
         dest, int(val) if not isinstance(val, str) else hash(val) & 0xFFFF_FFFF
     )

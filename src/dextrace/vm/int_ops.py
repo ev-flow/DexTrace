@@ -8,7 +8,7 @@ vm/int_ops.py — 32/64-bit integer + IEEE 754 helpers used by arithmetic handle
 Shift contracts:
   shl-int:   i32(u32(a) << (b & 0x1F))
   shr-int:   i32(a) >> (b & 0x1F)          — arithmetic (sign-extends)
-  ushr-int:  u32(a) >> (b & 0x1F)          — logical (zero-fills), result always >= 0
+  ushr-int:  i32(u32(a) >> (b & 0x1F))     — logical (zero-fills), re-signed to 32-bit
   shl-long:  i64(a << (b & 0x3F))           — long shift count is 6 bits
   shr-long:  i64(a) >> (b & 0x3F)
   ushr-long: u64(a) >> (b & 0x3F)
@@ -20,6 +20,28 @@ and Python floats (used inside the handler) via the struct module.
 from __future__ import annotations
 
 import struct
+
+
+def i8(v: int) -> int:
+    """Truncate to 8 bits then sign-extend (byte)."""
+    v &= 0xFF
+    return v - 0x100 if v >= 0x80 else v
+
+
+def i16(v: int) -> int:
+    """Truncate to 16 bits then sign-extend (short)."""
+    v &= 0xFFFF
+    return v - 0x10000 if v >= 0x8000 else v
+
+
+def u16(v: int) -> int:
+    """Truncate to unsigned 16 bits (char: zero-extend)."""
+    return v & 0xFFFF
+
+
+def u1(v: int) -> int:
+    """Normalize to a Dalvik boolean (0 or 1)."""
+    return 1 if (v & 1) else 0
 
 
 def i32(v: int) -> int:

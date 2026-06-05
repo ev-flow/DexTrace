@@ -112,4 +112,3 @@ class TestVMRunConstReturn:
 
         rc = main(["run", str(FIXTURE), "--entry", "Lp1;->missing()I"])
         assert rc == 1
-
