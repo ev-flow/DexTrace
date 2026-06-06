@@ -87,6 +87,24 @@ DexTrace implements **progressive API tracing stages** aligned with
 
 ---
 
+## ⚙️ Dynamic Execution (Dalvik VM)
+
+DexTrace includes an iterative **Dalvik bytecode interpreter** (`src/dextrace/vm/`)
+that can actually execute a method instead of only statically inspecting it.
+
+- executes a single entry method by signature, with caller-supplied arguments
+- supports integer/long/float/double arithmetic, branches, comparisons, array and
+  field access, type checks/conversions, `throw`, and try/catch exception flow
+- resolves virtual calls through a constructed class hierarchy / vtable
+- simulates common Android/Java framework calls via **Android API stubs**
+  (`vm/android_stubs/`) so malware-style flows can run without a device
+- records a per-instruction execution trace and a call tree of internal calls and
+  stubbed API calls
+
+Exposed through the `dextrace run` command (see below).
+
+---
+
 ## Repository Structure
 
 ```text
@@ -95,6 +113,7 @@ src/dextrace/
   cli/                    # CLI entry points
   core/                   # APK/DEX parsing and API extraction core
   dalvik/                 # Dalvik disassembly and opcode utilities
+  vm/                     # Dalvik bytecode execution engine, handlers, Android stubs
   manifest/               # binary AndroidManifest parsing
   errors.py               # shared project exceptions
   version.py              # package version
@@ -146,6 +165,19 @@ Includes:
 * payload decoding
 * disassembly support
 * smali-oriented helpers
+
+#### `src/dextrace/vm/`
+
+Dalvik bytecode **execution** (dynamic analysis), distinct from `dalvik/` disassembly.
+
+Includes:
+
+* `engine.py`: the iterative `DalvikVM` execution engine
+* opcode handlers under `handlers/` (arithmetic, array, branch, compare, field, move, throw, type-check, type-conversion)
+* simulated Android/Java framework methods under `android_stubs/` (content, filesystem, intent, network, runtime, sms, telephony, text)
+* execution state, register file, object heap, call frames, class hierarchy / vtable resolution, and execution tracing
+
+This subsystem powers the `dextrace run` command.
 
 #### `src/dextrace/manifest/`
 
@@ -232,6 +264,39 @@ All commands support structured JSON output:
 dextrace dex --api-seq --json sample.apk
 ```
 
+## ⚙️ VM Execution (`dextrace run`)
+
+Execute a single method with the Dalvik VM and print its return value.
+The input may be a `.dex` file or a `.apk` (the embedded DEX is loaded automatically).
+
+```bash
+dextrace run --help
+```
+
+Run an entry method by signature:
+
+```bash
+dextrace run sample.dex --entry 'Lp1;->main()I'
+```
+
+Pass arguments (`--arg`/`-a`, repeatable; ints are auto-detected from decimal or `0x` hex,
+everything else is a string). Use `--args` for an explicit JSON list of mixed int/string:
+
+```bash
+dextrace run sample.dex --entry 'Lp2/Fib;->fib(I)I' --arg 10
+dextrace run sample.dex --entry 'Lp1;->main()I' --args '["+15555550100","hi"]'
+```
+
+Useful flags:
+
+* `--json` — emit the result (and, with `--trace`, `api_calls`) as JSON
+* `--trace` — print the call tree of internal calls and stubbed API calls
+* `--strict-stubs` — treat every unstubbed external call as an error (default: void misses are silent no-ops)
+* `--dump-regs` — print non-zero registers after execution
+* `--verbose` / `-v` — print `[INFO]` progress to stderr
+
+Exit codes: `0` success, `1` user error (bad args / method not found), `2` VM runtime error, `3` parse error.
+
 ## Example Output
 
 ### Stage 2
@@ -278,6 +343,12 @@ Run the full test suite:
 
 ```bash
 pytest
+```
+
+If you use the Pipenv workflow, run it through Pipenv instead:
+
+```bash
+pipenv run pytest
 ```
 
 Run a targeted test file:
@@ -327,6 +398,12 @@ pytest -k api_extractor
 
   ```bash
   pytest -k disassembler
+  ```
+
+* VM execution / `dextrace run` changes:
+
+  ```bash
+  pytest -k vm
   ```
 
 ---

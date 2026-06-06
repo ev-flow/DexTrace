@@ -46,6 +46,12 @@ Run the test suite once before making changes:
 pytest
 ```
 
+If you use the Pipenv workflow, run tests through Pipenv instead:
+
+```bash
+pipenv run pytest
+```
+
 ---
 
 ## 2. General contributor loop
@@ -225,6 +231,40 @@ pytest \
   tests/test_all_formats_inferable.py \
   tests/test_generated_bytecode_vectors.py
 ```
+
+---
+
+### G. VM execution changes
+
+This is bytecode **execution** (`src/dextrace/vm/`), not disassembly. Touch it when
+changing how methods run under `dextrace run`.
+
+Relevant files:
+
+* `src/dextrace/vm/engine.py` (execution loop, invoke resolution, stub dispatch, try/catch)
+* `src/dextrace/vm/decoder.py`, `state.py`, `register_file.py`, `call_frame.py`
+* `src/dextrace/vm/heap.py`, `class_hierarchy.py`, `int_ops.py`, `signals.py`, `trace.py`, `errors.py`
+* `src/dextrace/vm/handlers/` (opcode handlers)
+* `src/dextrace/vm/android_stubs/` (simulated Android/Java framework methods)
+* `src/dextrace/cli/cmd_run.py` (the `dextrace run` CLI surface)
+
+Typical reasons to modify:
+
+* a new or incorrect opcode handler
+* virtual/interface dispatch or class-hierarchy resolution bugs
+* try/catch / exception-flow handling
+* a missing or wrong Android API stub
+* `dextrace run` argument parsing or output formatting
+
+Validate with:
+
+```bash
+pytest -k vm
+```
+
+When adding a new opcode handler or Android stub, prefer a small `tests/test_vm_run_*.py`
+that executes a synthetic method and asserts the result, or a focused unit test under
+`tests/vm/`.
 
 ---
 
