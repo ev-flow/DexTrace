@@ -248,6 +248,20 @@ class TestStringInitBytes:
         assert result is VOID
         assert heap.get_value(str_handle) == "hello"
 
+    def test_utf8_bytes_decoded_by_default(self):
+        # new String(byte[]) uses Android's platform default charset (UTF-8),
+        # so multi-byte sequences must decode correctly without an explicit
+        # charset (PR #9 review #2).
+        heap = ObjectHeap()
+        str_handle = heap.allocate("Ljava/lang/String;")
+        arr_handle = heap.allocate_array("[B", 3)
+        arr = heap.get_array(arr_handle)
+        for i, b in enumerate([0xE6, 0xBC, 0xA2]):
+            arr[i] = b
+        result = stub_string_init_bytes([str_handle, arr_handle], heap, [])
+        assert result is VOID
+        assert heap.get_value(str_handle) == "漢"
+
     def test_registered_in_registry(self):
         assert "Ljava/lang/String;-><init>([B)V" in REGISTRY
         assert "Ljava/lang/String;-><init>([BLjava/lang/String;)V" in REGISTRY

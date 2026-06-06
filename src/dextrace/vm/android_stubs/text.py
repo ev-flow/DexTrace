@@ -135,9 +135,13 @@ def _init_string_from_bytes(heap, str_handle, arr_handle, charset: str) -> StubR
 def stub_string_init_bytes(
     args: List[Any], heap, _trace: List[Dict[str, Any]]
 ) -> StubResult:
-    """String.<init>([B)V — construct String from raw byte array (Latin-1)."""
+    """String.<init>([B)V — construct String from raw byte array.
+
+    Defaults to UTF-8 to match Android's platform default charset; the shared
+    decoder falls back to Latin-1 on invalid byte sequences.
+    """
     arr_handle = args[1] if len(args) > 1 else 0
-    return _init_string_from_bytes(heap, args[0], arr_handle, "latin-1")
+    return _init_string_from_bytes(heap, args[0], arr_handle, "utf-8")
 
 
 def stub_string_init_bytes_charset(
@@ -146,7 +150,7 @@ def stub_string_init_bytes_charset(
     """String.<init>([BLjava/lang/String;)V — byte array + charset name."""
     arr_handle = args[1] if len(args) > 1 else 0
     charset_handle = args[2] if len(args) > 2 else 0
-    charset = _str_val(heap, charset_handle) if charset_handle else "latin-1"
+    charset = _str_val(heap, charset_handle) if charset_handle else "utf-8"
     return _init_string_from_bytes(heap, args[0], arr_handle, charset)
 
 
