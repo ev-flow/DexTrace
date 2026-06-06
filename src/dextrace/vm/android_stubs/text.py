@@ -113,12 +113,19 @@ def stub_sb_tostring(
 # String helpers
 # ---------------------------------------------------------------------------
 
+# Android's new String(byte[]) uses the platform default charset, which is
+# UTF-8. Single source of truth for the default used when no charset is given.
+_DEFAULT_CHARSET = "utf-8"
 
-def _init_string_from_bytes(heap, str_handle, arr_handle, charset: str) -> StubResult:
+
+def _init_string_from_bytes(
+    heap, str_handle, arr_handle, charset: str = _DEFAULT_CHARSET
+) -> StubResult:
     """Shared body for String.<init>([B...): decode a heap byte array into str_handle.
 
     Dalvik byte arrays hold signed values, so each element is masked to a byte
-    before decoding. Falls back to Latin-1 if the charset is unknown/invalid.
+    before decoding. Defaults to UTF-8 (Android's platform default); falls back
+    to Latin-1 if the charset is unknown/invalid or the bytes are not valid in it.
     """
     if arr_handle == 0:
         heap.set_value(str_handle, "")
@@ -135,13 +142,9 @@ def _init_string_from_bytes(heap, str_handle, arr_handle, charset: str) -> StubR
 def stub_string_init_bytes(
     args: List[Any], heap, _trace: List[Dict[str, Any]]
 ) -> StubResult:
-    """String.<init>([B)V — construct String from raw byte array.
-
-    Defaults to UTF-8 to match Android's platform default charset; the shared
-    decoder falls back to Latin-1 on invalid byte sequences.
-    """
+    """String.<init>([B)V — construct String from raw byte array (default charset)."""
     arr_handle = args[1] if len(args) > 1 else 0
-    return _init_string_from_bytes(heap, args[0], arr_handle, "utf-8")
+    return _init_string_from_bytes(heap, args[0], arr_handle)
 
 
 def stub_string_init_bytes_charset(
@@ -150,8 +153,10 @@ def stub_string_init_bytes_charset(
     """String.<init>([BLjava/lang/String;)V — byte array + charset name."""
     arr_handle = args[1] if len(args) > 1 else 0
     charset_handle = args[2] if len(args) > 2 else 0
-    charset = _str_val(heap, charset_handle) if charset_handle else "utf-8"
-    return _init_string_from_bytes(heap, args[0], arr_handle, charset)
+    if charset_handle:
+        charset = _str_val(heap, charset_handle)
+        return _init_string_from_bytes(heap, args[0], arr_handle, charset)
+    return _init_string_from_bytes(heap, args[0], arr_handle)
 
 
 def stub_string_equals(
