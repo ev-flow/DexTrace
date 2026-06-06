@@ -377,6 +377,50 @@ def get_apk_permissions(apk_path: PathT) -> List[str]:
 # VM execution (public + stable; Quark imports this)
 # ----------------------------
 
+def _execute_method_worker(
+    target: str, entry_sig: str, args: List
+) -> Optional[Any]:
+    """Run ``entry_sig`` in the first DEX of ``target`` that defines it.
+
+    Module-level (not a closure) so it can be pickled and dispatched to a
+    ``ProcessPoolExecutor`` worker on spawn-based platforms (macOS/Windows).
+    """
+    from dextrace.core.dex_resolver import DexResolver  # type: ignore
+    from dextrace.core.dex_code_map import build_sig_to_codeoff_map  # type: ignore
+    from dextrace.vm.engine import DalvikVM  # type: ignore
+
+    for _dex_name, dex_bytes in _load_dex_contexts(target):
+        try:
+            resolver = DexResolver(dex_bytes)
+            sig_to_codeoff = build_sig_to_codeoff_map(dex_bytes, resolver)
+            if entry_sig not in sig_to_codeoff:
+                continue
+            vm = DalvikVM(dex_bytes, resolver, sig_to_codeoff)
+            return vm.run(entry_sig, args)
+        except Exception:
+            continue
+    return None
+
+
+def _run_with_timeout(fn, fn_args, timeout_s: float) -> Optional[Any]:
+    """Run ``fn(*fn_args)`` in a separate process; return ``None`` on timeout.
+
+    A process boundary lets the caller return promptly even when the worker is
+    stuck in a pathological/untrusted DEX — the runaway process is abandoned
+    (``wait=False``) instead of blocking the caller. ``finally`` shuts the pool
+    down on every path (a ``return`` in ``try`` would skip an ``else`` branch,
+    leaking the executor on success). Args and the return value must be
+    picklable to cross the boundary; anything else degrades to ``None``.
+    """
+    executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)
+    try:
+        return executor.submit(fn, *fn_args).result(timeout=timeout_s)
+    except Exception:  # incl. TimeoutError (an OSError subclass since 3.11)
+        return None
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 def execute_method(
     target_path: PathT,
     entry_sig: str,
@@ -406,26 +450,6 @@ def execute_method(
         args = []
 
     target = str(target_path)
-
-    def _run() -> Optional[Any]:
-        from dextrace.core.dex_resolver import DexResolver  # type: ignore
-        from dextrace.core.dex_code_map import build_sig_to_codeoff_map  # type: ignore
-        from dextrace.vm.engine import DalvikVM  # type: ignore
-
-        for _dex_name, dex_bytes in _load_dex_contexts(target):
-            try:
-                resolver = DexResolver(dex_bytes)
-                sig_to_codeoff = build_sig_to_codeoff_map(dex_bytes, resolver)
-                if entry_sig not in sig_to_codeoff:
-                    continue
-                vm = DalvikVM(dex_bytes, resolver, sig_to_codeoff)
-                return vm.run(entry_sig, args)
-            except Exception:
-                continue
-        return None
-
-    try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(_run).result(timeout=timeout_s)
-    except Exception:
-        return None
+    return _run_with_timeout(
+        _execute_method_worker, (target, entry_sig, args), timeout_s
+    )

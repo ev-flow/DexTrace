@@ -18,9 +18,10 @@ One-liner verification:
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
-from dextrace.api import execute_method
+from dextrace.api import _run_with_timeout, execute_method
 
 SAMPLES = Path(__file__).parent / "fixtures" / "samples"
 CONST_RETURN = SAMPLES / "const_return.dex"
@@ -50,3 +51,19 @@ class TestExecuteMethod:
     def test_missing_file_returns_none(self):
         """A bad path is swallowed and reported as None (resolve-or-None contract)."""
         assert execute_method(SAMPLES / "does_not_exist.dex", CONST_RETURN_ENTRY) is None
+
+
+class TestTimeout:
+    def test_timeout_returns_promptly(self):
+        """The timeout honors the deadline instead of waiting for the worker.
+
+        Regression for the original ThreadPoolExecutor-in-a-with-block, which
+        called shutdown(wait=True) on timeout and blocked until the worker
+        finished. The process-backed helper must return well before the 30s
+        sleep would complete.
+        """
+        start = time.monotonic()
+        result = _run_with_timeout(time.sleep, (30,), timeout_s=0.5)
+        elapsed = time.monotonic() - start
+        assert result is None
+        assert elapsed < 10, f"timeout did not return early (took {elapsed:.1f}s)"
