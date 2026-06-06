@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 from dataclasses import dataclass
 from os import PathLike
@@ -370,3 +371,61 @@ def get_apk_permissions(apk_path: PathT) -> List[str]:
     if isinstance(perms, list):
         return [str(x) for x in perms]
     return []
+
+
+# ----------------------------
+# VM execution (public + stable; Quark imports this)
+# ----------------------------
+
+def execute_method(
+    target_path: PathT,
+    entry_sig: str,
+    args: Optional[List] = None,
+    *,
+    timeout_s: float = 5.0,
+) -> Optional[Any]:
+    """
+    Execute a single Dalvik method in the DexTrace VM and return its value.
+
+    This is the stable public wrapper over ``dextrace.vm.engine.DalvikVM`` —
+    callers (e.g. Quark) should import this instead of touching the VM directly.
+
+    Accepts an APK or a raw DEX. DEX files are searched in stable order
+    (classes.dex first); the method runs in the first DEX that contains it.
+
+    :param target_path: Path to an APK or DEX file.
+    :param entry_sig: Dalvik method signature, e.g.
+        'Lcom/example/Foo;->bar()Ljava/lang/String;'
+    :param args: Positional arguments to pass to the method (default: []).
+    :param timeout_s: Per-call wall-clock timeout in seconds (default: 5.0).
+    :return: The method's return value, or ``None`` if the method is not found,
+        execution raises, or the timeout fires. Callers treat ``None`` as
+        "could not resolve".
+    """
+    if args is None:
+        args = []
+
+    target = str(target_path)
+
+    def _run() -> Optional[Any]:
+        from dextrace.core.dex_resolver import DexResolver  # type: ignore
+        from dextrace.core.dex_code_map import build_sig_to_codeoff_map  # type: ignore
+        from dextrace.vm.engine import DalvikVM  # type: ignore
+
+        for _dex_name, dex_bytes in _load_dex_contexts(target):
+            try:
+                resolver = DexResolver(dex_bytes)
+                sig_to_codeoff = build_sig_to_codeoff_map(dex_bytes, resolver)
+                if entry_sig not in sig_to_codeoff:
+                    continue
+                vm = DalvikVM(dex_bytes, resolver, sig_to_codeoff)
+                return vm.run(entry_sig, args)
+            except Exception:
+                continue
+        return None
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(_run).result(timeout=timeout_s)
+    except Exception:
+        return None
