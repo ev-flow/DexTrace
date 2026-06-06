@@ -15,12 +15,33 @@ from __future__ import annotations
 import struct
 
 from dextrace.dalvik.types import DecodedInsn
-from dextrace.vm.int_ops import i32, reg_index
+from dextrace.vm.int_ops import i32, i64, reg_index
 from dextrace.vm.state import VMState
+
+# Saturation bounds for float/double -> integral conversions.
+INT_MIN, INT_MAX = -(2**31), 2**31 - 1
+LONG_MIN, LONG_MAX = -(2**63), 2**63 - 1
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _float_to_integral(f: float, lo: int, hi: int) -> int:
+    """Java/Dalvik float->integral narrowing.
+
+    Python's int() raises on NaN/Infinity and wraps finite overflow; Dalvik
+    instead produces deterministic saturated values: NaN -> 0, +Inf / overflow
+    -> hi, -Inf / underflow -> lo, finite in-range -> truncate toward zero.
+    """
+    if f != f:  # NaN
+        return 0
+    if f == float("inf"):
+        return hi
+    if f == float("-inf"):
+        return lo
+    v = int(f)  # finite: truncates toward zero
+    return hi if v > hi else lo if v < lo else v
 
 
 def _float_bits(f: float) -> int:
@@ -107,7 +128,7 @@ def handle_float_to_int(insn: DecodedInsn, state: VMState) -> None:
     dest = reg_index(insn.regs[0])
     src = reg_index(insn.regs[1])
     f = _bits_to_float(state.registers.get(src))
-    state.registers.set(dest, i32(int(f)))
+    state.registers.set(dest, i32(_float_to_integral(f, INT_MIN, INT_MAX)))
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +147,7 @@ def handle_double_to_int(insn: DecodedInsn, state: VMState) -> None:
     dest = reg_index(insn.regs[0])
     src = reg_index(insn.regs[1])
     d = _bits_to_double(state.registers.get_wide(src))
-    state.registers.set(dest, i32(int(d)))
+    state.registers.set(dest, i32(_float_to_integral(d, INT_MIN, INT_MAX)))
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +169,9 @@ def handle_float_to_long(insn: DecodedInsn, state: VMState) -> None:
     dest = reg_index(insn.regs[0])
     src = reg_index(insn.regs[1])
     f = _bits_to_float(state.registers.get(src))
-    state.registers.set_wide(dest, int(f) & 0xFFFF_FFFF_FFFF_FFFF)
+    state.registers.set_wide(
+        dest, i64(_float_to_integral(f, LONG_MIN, LONG_MAX)) & 0xFFFF_FFFF_FFFF_FFFF
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +192,9 @@ def handle_double_to_long(insn: DecodedInsn, state: VMState) -> None:
     dest = reg_index(insn.regs[0])
     src = reg_index(insn.regs[1])
     d = _bits_to_double(state.registers.get_wide(src))
-    state.registers.set_wide(dest, int(d) & 0xFFFF_FFFF_FFFF_FFFF)
+    state.registers.set_wide(
+        dest, i64(_float_to_integral(d, LONG_MIN, LONG_MAX)) & 0xFFFF_FFFF_FFFF_FFFF
+    )
 
 
 # ---------------------------------------------------------------------------

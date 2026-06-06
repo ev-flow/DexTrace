@@ -8,7 +8,7 @@ vm/handlers/arithmetic.py — Integer arithmetic instruction handlers.
 Shift contracts (from int_ops.py):
   shl-int:  i32(u32(a) << (b & 0x1F))
   shr-int:  i32(a) >> (b & 0x1F)          — arithmetic (sign-extends)
-  ushr-int: u32(a) >> (b & 0x1F)          — logical (zero-fills)
+  ushr-int: i32(u32(a) >> (b & 0x1F))     — logical (zero-fills), then re-signed
 """
 
 from __future__ import annotations
@@ -349,19 +349,21 @@ def handle_shr_int_lit8(insn: DecodedInsn, state: VMState) -> None:
 
 
 def handle_ushr_int(insn: DecodedInsn, state: VMState) -> None:
-    # Logical right shift: zero-fills, result always >= 0
+    # Logical right shift: zero-fills, then re-normalize to a signed 32-bit
+    # register value. Without i32() a 0-bit shift of a negative input would
+    # leave the unsigned form (e.g. -1 >>> 0 -> 0xFFFFFFFF instead of -1).
     dest, a, b = _get3(insn, state)
-    state.registers.set(dest, u32(a) >> (b & 0x1F))
+    state.registers.set(dest, i32(u32(a) >> (b & 0x1F)))
 
 
 def handle_ushr_int_2addr(insn: DecodedInsn, state: VMState) -> None:
     dest, a, b = _get2(insn, state)
-    state.registers.set(dest, u32(a) >> (b & 0x1F))
+    state.registers.set(dest, i32(u32(a) >> (b & 0x1F)))
 
 
 def handle_ushr_int_lit8(insn: DecodedInsn, state: VMState) -> None:
     dest, a, lit = _get_lit(insn, state)
-    state.registers.set(dest, u32(a) >> (lit & 0x1F))
+    state.registers.set(dest, i32(u32(a) >> (lit & 0x1F)))
 
 
 # ---------------------------------------------------------------------------
