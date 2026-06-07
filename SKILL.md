@@ -38,6 +38,7 @@ Map requests to one of these areas first:
 - `src/dextrace/cli/` for CLI behavior
 - `src/dextrace/core/` for APK / DEX parsing and API extraction
 - `src/dextrace/dalvik/` for bytecode decoding and disassembly internals
+- `src/dextrace/vm/` for Dalvik bytecode execution (engine, opcode handlers, Android stubs) behind `dextrace run`
 - `src/dextrace/manifest/` for binary manifest parsing
 - `tests/` for validation and fixtures
 
@@ -80,6 +81,7 @@ Files:
 - `src/dextrace/cli/cmd_meta.py`
 - `src/dextrace/cli/cmd_disasm.py`
 - `src/dextrace/cli/cmd_dex.py`
+- `src/dextrace/cli/cmd_run.py`
 
 Tests:
 - `tests/test_cli_meta.py`
@@ -145,6 +147,33 @@ Tests:
 - `tests/test_dalvik_payload.py`
 - `tests/test_all_formats_inferable.py`
 - `tests/test_generated_bytecode_vectors.py`
+
+### VM execution (`dextrace run`)
+Bytecode execution and dynamic analysis, distinct from `dalvik/` disassembly.
+
+Files:
+- `src/dextrace/vm/engine.py`
+- `src/dextrace/vm/decoder.py`
+- `src/dextrace/vm/state.py`
+- `src/dextrace/vm/register_file.py`
+- `src/dextrace/vm/call_frame.py`
+- `src/dextrace/vm/heap.py`
+- `src/dextrace/vm/class_hierarchy.py`
+- `src/dextrace/vm/int_ops.py`
+- `src/dextrace/vm/signals.py`
+- `src/dextrace/vm/trace.py`
+- `src/dextrace/vm/errors.py`
+- `src/dextrace/vm/handlers/` (opcode handlers)
+- `src/dextrace/vm/android_stubs/` (simulated Android/Java framework methods)
+- `src/dextrace/cli/cmd_run.py`
+
+Tests:
+- `tests/test_vm_run_*.py`
+- `tests/test_vm_null_receiver.py`
+- `tests/test_vm_pending_result_lifecycle.py`
+- `tests/vm/`
+
+Run with `pytest -k vm`.
 
 ## Testing behavior
 

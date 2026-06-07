@@ -44,6 +44,19 @@ CLI command for DEX/API-oriented workflows.
 
 Used when inspecting DEX content, extracted references, or API-level evidence from bytecode.
 
+### `src/dextrace/cli/cmd_run.py`
+CLI command implementing `dextrace run`.
+
+Loads a DEX (or the DEX embedded in an APK), builds the method map, and executes a
+single entry method on the Dalvik VM (`src/dextrace/vm/`), printing the return value,
+optional call tree, and optional registers.
+
+### `src/dextrace/cli/_io.py`
+Shared input-loading helper for CLI subcommands.
+
+Provides `load_dex_bytes`, which loads DEX bytes from a `.dex` file or extracts
+`classes.dex` from an `.apk`, so each command does not re-implement input handling.
+
 ### `src/dextrace/cli/__init__.py`
 Package marker for CLI modules.
 
@@ -90,6 +103,12 @@ Provides method identity and indexing information used throughout DEX analysis.
 Maps parsed methods to code items or code-related structures.
 
 Supports downstream workflows that need to connect method definitions with instruction streams.
+
+### `src/dextrace/core/dex_class_iter.py`
+Shared iteration over DEX `class_def` and `encoded_method` structures.
+
+Walks class definitions without going through the full `dex_code_map.py` pipeline; used
+by the VM's `class_hierarchy.py` vtable builder and other class-walking code.
 
 ### `src/dextrace/core/dex_api_extractor.py`
 Extracts API usage evidence from parsed DEX methods.
@@ -183,7 +202,85 @@ Package marker for bundled data resources used by Dalvik internals.
 
 ---
 
-## 5. Manifest parsing
+## 5. Dalvik VM execution engine
+
+The `src/dextrace/vm/` package executes Dalvik bytecode (dynamic analysis). This is
+distinct from `src/dextrace/dalvik/`, which only decodes and disassembles instructions.
+It is the subsystem behind the `dextrace run` command.
+
+### `src/dextrace/vm/engine.py`
+`DalvikVM`, the iterative execution engine. Drives the instruction loop, invoke
+resolution, handler/stub dispatch, try/catch handling, and trace emission.
+
+### `src/dextrace/vm/decoder.py`
+Static-walk adapter that yields a method's decoded instructions for the engine.
+Raises `MethodNotFound` / `DexParseError` (`walk_method`).
+
+### `src/dextrace/vm/state.py`
+`VMState`: the mutable execution state carried through the instruction loop.
+
+### `src/dextrace/vm/register_file.py`
+`RegisterFile`: the Dalvik register file for a frame.
+
+### `src/dextrace/vm/call_frame.py`
+`CallFrame`: caller state saved at invoke time so execution can resume after a call.
+
+### `src/dextrace/vm/heap.py`
+Object heap mapping integer handles to `HeapEntry` records (`ObjectHeap`).
+
+### `src/dextrace/vm/class_hierarchy.py`
+`ClassHierarchy`: vtable construction and virtual method resolution.
+
+### `src/dextrace/vm/int_ops.py`
+32/64-bit integer and IEEE 754 float/double helpers used by the arithmetic handlers.
+
+### `src/dextrace/vm/signals.py`
+Internal exception-flow signals raised by handlers (`_ThrowSignal`).
+
+### `src/dextrace/vm/trace.py`
+Execution tracing: per-instruction `TraceStep` / `ExecutionTrace` and the
+`CallNode` / `CallTreeTrace` call-tree representation.
+
+### `src/dextrace/vm/errors.py`
+VM exception hierarchy (`DexTraceVMError`, `DexTraceNotImplementedError`, and Java-style
+exceptions such as `NullPointerException`, `ArithmeticException`, `ClassCastException`).
+
+### `src/dextrace/vm/__init__.py`
+Package marker for VM modules.
+
+### Opcode handlers — `src/dextrace/vm/handlers/`
+
+Each handler module registers the opcodes it implements with the engine.
+
+- `arithmetic.py`: integer/long/float/double arithmetic instructions
+- `array.py`: array creation and element access
+- `branch.py`: conditional branch and `goto` instructions
+- `compare.py`: `cmp*` comparison instructions
+- `field.py`: instance and static field access
+- `move.py`: `move`, `const`, and `move-result`/`move-exception` instructions
+- `throw.py`: the `throw vAA` opcode
+- `type_check.py`: `check-cast`, `instance-of`, `monitor-enter`, `monitor-exit`
+- `type_conv.py`: numeric type-conversion instructions
+- `__init__.py`: package marker for handler modules
+
+### Android API stubs — `src/dextrace/vm/android_stubs/`
+
+Simulated Android/Java framework methods so framework-dependent code can run without a
+device. `__init__.py` is the stub registry and shared value types (`StubResult`, `Value`,
+`Wide`, `ObjectRef`).
+
+- `content.py`: `ContentProvider` / `ContentResolver` and network connectivity stubs
+- `filesystem.py`: file I/O, Android UI, network extras, and `String` helpers
+- `intent.py`: `Intent`, `Bundle`, and `Context` stubs
+- `network.py`: Java networking stubs (`URL`/`HttpURLConnection`/streams)
+- `runtime.py`: `Runtime`, `Process`, `SharedPreferences`, and system stubs
+- `sms.py`: `SmsManager` stubs
+- `telephony.py`: telephony / `SmsMessage` stubs
+- `text.py`: `java.lang`/`java.util` stubs (`StringBuilder`, `String`, date formatting)
+
+---
+
+## 6. Manifest parsing
 
 ### `src/dextrace/manifest/axml_parser.py`
 Low-level binary AndroidManifest AXML parser.
@@ -195,7 +292,7 @@ Package marker for manifest modules.
 
 ---
 
-## 6. Support modules
+## 7. Support modules
 
 ### `src/dextrace/errors.py`
 Shared error and exception definitions.
@@ -210,7 +307,7 @@ Top-level package marker and package exports.
 
 ---
 
-## 7. Test suite overview
+## 8. Test suite overview
 
 The test suite is organized by subsystem. Contributors should treat tests as the main executable specification for current behavior.
 
@@ -229,7 +326,7 @@ Package marker for fixtures.
 
 ---
 
-## 8. Test files by area
+## 9. Test files by area
 
 ### CLI and smoke tests
 
@@ -259,6 +356,10 @@ Coverage for DEX parser behavior.
 
 #### `tests/test_dex_header.py`
 Coverage for DEX header parsing.
+
+#### `tests/test_dex_catch.py`
+Parser-level coverage for `try_item` and `encoded_catch_handler` decoding (try/catch
+region and typed catch handlers).
 
 #### `tests/test_dummy_dex_fixture.py`
 Validates synthetic DEX fixture behavior.
@@ -297,9 +398,34 @@ Checks format inference coverage.
 #### `tests/test_generated_bytecode_vectors.py`
 Coverage based on generated bytecode vectors.
 
+### VM execution tests
+
+End-to-end coverage for the Dalvik VM (`src/dextrace/vm/`) and `dextrace run`. Most are
+named `tests/test_vm_run_*.py` and execute a small synthetic method to assert a result:
+
+#### `tests/test_vm_run_const_return.py`, `tests/test_vm_run_fibonacci.py`, `tests/test_vm_run_long_arithmetic.py`
+Arithmetic, constants, recursion, and wide (long) value handling.
+
+#### `tests/test_vm_run_arrays.py`, `tests/test_vm_run_instance_fields.py`, `tests/test_vm_run_packed_switch.py`
+Array operations, instance field access, and `packed-switch` control flow.
+
+#### `tests/test_vm_run_inheritance.py`, `tests/test_vm_run_interface_dispatch.py`
+Virtual / interface method dispatch through the class hierarchy.
+
+#### `tests/test_vm_run_try_catch.py`, `tests/test_vm_run_try_catch_with_fields.py`, `tests/test_vm_run_try_catch_with_stubs.py`
+Exception flow, including interaction with fields and Android API stubs.
+
+#### `tests/test_vm_null_receiver.py`, `tests/test_vm_pending_result_lifecycle.py`
+Null-receiver handling and the `move-result` pending-result lifecycle.
+
+#### `tests/vm/`
+Additional VM-focused tests and fixtures.
+
+Run the VM tests with `pytest -k vm`.
+
 ---
 
-## 9. How to use this document during handoff
+## 10. How to use this document during handoff
 
 Use this document to answer three common contributor questions.
 
@@ -309,7 +435,7 @@ Start with:
 1. `README.md`
 2. `src/dextrace/api.py`
 3. `src/dextrace/cli/main.py`
-4. the relevant subsystem in `src/dextrace/core/`, `dalvik/`, or `manifest/`
+4. the relevant subsystem in `src/dextrace/core/`, `dalvik/`, `vm/`, or `manifest/`
 
 ### “Where should I change code?”
 Map the problem to a subsystem first:
@@ -319,6 +445,9 @@ Map the problem to a subsystem first:
 - DEX structure problem → `dex_parser.py`, related core tables
 - API extraction problem → `dex_api_extractor.py`, `dex_resolver.py`
 - instruction/disassembly problem → `dalvik/`
+- VM execution / `dextrace run` problem → `src/dextrace/vm/`, `src/dextrace/cli/cmd_run.py`
 
 ### “Which tests should I run?”
 Run the narrowest relevant subsystem tests first, then broaden if needed.
+
+- VM execution changes → `pytest -k vm`

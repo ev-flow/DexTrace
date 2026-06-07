@@ -106,6 +106,7 @@ Key areas:
 * `cli/`: command-line entry points
 * `core/`: APK / DEX parsing and API extraction
 * `dalvik/`: bytecode decoding and disassembly internals
+* `vm/`: Dalvik bytecode execution engine, opcode handlers, and Android API stubs
 * `manifest/`: binary manifest parsing
 * `tests/`: pytest test suite and fixtures
 
@@ -121,6 +122,7 @@ Typical files:
 * `src/dextrace/cli/cmd_meta.py`
 * `src/dextrace/cli/cmd_disasm.py`
 * `src/dextrace/cli/cmd_dex.py`
+* `src/dextrace/cli/cmd_run.py`
 
 Validate with:
 
@@ -221,12 +223,38 @@ pytest \
   tests/test_generated_bytecode_vectors.py
 ```
 
+### 7. Modify VM execution (`dextrace run`)
+
+This is bytecode **execution**, not disassembly.
+
+Typical files:
+
+* `src/dextrace/vm/engine.py`
+* `src/dextrace/vm/handlers/` (opcode handlers)
+* `src/dextrace/vm/android_stubs/` (simulated Android/Java framework methods)
+* other `src/dextrace/vm/` modules (`decoder.py`, `state.py`, `register_file.py`,
+  `call_frame.py`, `heap.py`, `class_hierarchy.py`, `int_ops.py`, `signals.py`,
+  `trace.py`, `errors.py`)
+* `src/dextrace/cli/cmd_run.py`
+
+Validate with:
+
+```bash
+pytest -k vm
+```
+
 ## Testing guidance
 
 ### Full suite
 
 ```bash
 pytest
+```
+
+If you use the Pipenv workflow, run tests through Pipenv instead:
+
+```bash
+pipenv run pytest
 ```
 
 ### Targeted runs
@@ -237,6 +265,7 @@ Examples:
 pytest tests/test_manifest_parser.py
 pytest tests/test_dex_api_extractor.py
 pytest -k disassembler
+pytest -k vm
 pytest -k smoke
 ```
 

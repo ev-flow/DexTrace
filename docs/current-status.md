@@ -18,14 +18,19 @@ At the current stage, DexTrace includes:
 - DEX structure parsing
 - Dalvik bytecode disassembly support
 - API extraction from parsed bytecode
-- CLI commands for metadata, disassembly, and DEX-oriented inspection
-- pytest coverage across parser, manifest, disassembly, and API extraction areas
+- a Dalvik bytecode **execution** engine (`src/dextrace/vm/`) with opcode handlers,
+  class-hierarchy/virtual dispatch, try/catch handling, and execution tracing
+- simulated Android/Java framework methods (`src/dextrace/vm/android_stubs/`)
+- CLI commands for metadata, disassembly, DEX-oriented inspection, and method
+  execution (`dextrace run`)
+- pytest coverage across parser, manifest, disassembly, API extraction, and VM areas
 
 The codebase is already organized into distinct subsystems under:
 
 - `src/dextrace/cli/`
 - `src/dextrace/core/`
 - `src/dextrace/dalvik/`
+- `src/dextrace/vm/`
 - `src/dextrace/manifest/`
 - `tests/`
 
