@@ -122,6 +122,7 @@ Typical files:
 * `src/dextrace/cli/cmd_meta.py`
 * `src/dextrace/cli/cmd_disasm.py`
 * `src/dextrace/cli/cmd_dex.py`
+* `src/dextrace/cli/cmd_run.py`
 
 Validate with:
 

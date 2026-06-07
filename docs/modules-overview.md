@@ -51,6 +51,12 @@ Loads a DEX (or the DEX embedded in an APK), builds the method map, and executes
 single entry method on the Dalvik VM (`src/dextrace/vm/`), printing the return value,
 optional call tree, and optional registers.
 
+### `src/dextrace/cli/_io.py`
+Shared input-loading helper for CLI subcommands.
+
+Provides `load_dex_bytes`, which loads DEX bytes from a `.dex` file or extracts
+`classes.dex` from an `.apk`, so each command does not re-implement input handling.
+
 ### `src/dextrace/cli/__init__.py`
 Package marker for CLI modules.
 
@@ -97,6 +103,12 @@ Provides method identity and indexing information used throughout DEX analysis.
 Maps parsed methods to code items or code-related structures.
 
 Supports downstream workflows that need to connect method definitions with instruction streams.
+
+### `src/dextrace/core/dex_class_iter.py`
+Shared iteration over DEX `class_def` and `encoded_method` structures.
+
+Walks class definitions without going through the full `dex_code_map.py` pipeline; used
+by the VM's `class_hierarchy.py` vtable builder and other class-walking code.
 
 ### `src/dextrace/core/dex_api_extractor.py`
 Extracts API usage evidence from parsed DEX methods.
@@ -345,6 +357,10 @@ Coverage for DEX parser behavior.
 #### `tests/test_dex_header.py`
 Coverage for DEX header parsing.
 
+#### `tests/test_dex_catch.py`
+Parser-level coverage for `try_item` and `encoded_catch_handler` decoding (try/catch
+region and typed catch handlers).
+
 #### `tests/test_dummy_dex_fixture.py`
 Validates synthetic DEX fixture behavior.
 
@@ -419,7 +435,7 @@ Start with:
 1. `README.md`
 2. `src/dextrace/api.py`
 3. `src/dextrace/cli/main.py`
-4. the relevant subsystem in `src/dextrace/core/`, `dalvik/`, or `manifest/`
+4. the relevant subsystem in `src/dextrace/core/`, `dalvik/`, `vm/`, or `manifest/`
 
 ### “Where should I change code?”
 Map the problem to a subsystem first:
@@ -429,6 +445,9 @@ Map the problem to a subsystem first:
 - DEX structure problem → `dex_parser.py`, related core tables
 - API extraction problem → `dex_api_extractor.py`, `dex_resolver.py`
 - instruction/disassembly problem → `dalvik/`
+- VM execution / `dextrace run` problem → `src/dextrace/vm/`, `src/dextrace/cli/cmd_run.py`
 
 ### “Which tests should I run?”
 Run the narrowest relevant subsystem tests first, then broaden if needed.
+
+- VM execution changes → `pytest -k vm`
