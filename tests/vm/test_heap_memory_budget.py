@@ -46,6 +46,13 @@ class TestAllocationBudget:
         h = heap.allocate_array("[I", 1_000_000)
         assert len(heap.get_array(h)) == 1_000_000
 
+    def test_zero_or_negative_limit_disables_budget(self):
+        """memory_limit_mb=0 (or <0) means "no limit", consistent with the CLI."""
+        for mb in (0, -1):
+            heap = ObjectHeap(memory_limit_mb=mb)
+            assert heap._max_bytes is None
+            heap.allocate_array("[I", 2_000_000)  # would trip any real budget
+
     def test_huge_array_rejected_before_allocation(self):
         """A 2**40-element request (~8 TiB) must be rejected by arithmetic.
 
@@ -165,3 +172,60 @@ class TestVMIntegration:
         vm._heap._max_bytes = 1  # any allocation now over-budget
         with pytest.raises(DexTraceVMError, match="memory budget exceeded"):
             vm.run(ARRAYS_ENTRY)
+
+
+class TestSetValueBudget:
+    """Value *mutation* (e.g. StringBuilder.append) is charged its growth, so
+    it cannot bypass the budget the creation sites enforce."""
+
+    def test_growth_is_charged_by_exact_delta(self):
+        heap = ObjectHeap(memory_limit_mb=64)
+        h = heap.allocate("Ljava/lang/String;", value="ab")
+        before = heap._used_bytes
+        new = "x" * 1000
+        heap.set_value(h, new)
+        assert heap._used_bytes - before == (
+            ObjectHeap._value_bytes(new) - ObjectHeap._value_bytes("ab")
+        )
+
+    def test_over_budget_growth_raises_and_keeps_old_value(self):
+        heap = ObjectHeap(memory_limit_mb=1)
+        h = heap.allocate("Ljava/lang/StringBuilder;", value="seed")
+        with pytest.raises(DexTraceVMError, match="memory budget exceeded"):
+            heap.set_value(h, "x" * (4 * MIB))
+        assert heap.get_value(h) == "seed"  # oversized value never stored
+
+    def test_cumulative_appends_trip_the_cap(self):
+        """The StringBuilder amplification pattern is bounded."""
+        heap = ObjectHeap(memory_limit_mb=1)
+        h = heap.allocate("Ljava/lang/StringBuilder;", value="")
+        with pytest.raises(DexTraceVMError, match="memory budget exceeded"):
+            s = ""
+            for _ in range(200):
+                s += "x" * 50_000  # ~50 KB growth per step
+                heap.set_value(h, s)
+
+    def test_shrink_is_not_charged(self):
+        heap = ObjectHeap(memory_limit_mb=64)
+        h = heap.allocate("Ljava/lang/String;", value="x" * 100_000)
+        used = heap._used_bytes
+        heap.set_value(h, "y")  # shrink
+        assert heap._used_bytes == used  # neither charged nor credited
+        assert heap.get_value(h) == "y"
+
+    def test_no_budget_never_charges(self):
+        heap = ObjectHeap()  # unbounded
+        h = heap.allocate("Ljava/lang/String;", value="")
+        heap.set_value(h, "x" * (4 * MIB))  # no error
+        assert len(heap.get_value(h)) == 4 * MIB
+
+    def test_stringbuilder_append_stub_loop_is_bounded(self):
+        """Drive the real StringBuilder.append stub -> set_value attack path."""
+        from dextrace.vm.android_stubs.text import stub_sb_append_string
+
+        heap = ObjectHeap(memory_limit_mb=1)
+        sb = heap.allocate("Ljava/lang/StringBuilder;", value="")
+        chunk = heap.allocate("Ljava/lang/String;", value="x" * 100_000)
+        with pytest.raises(DexTraceVMError, match="memory budget exceeded"):
+            for _ in range(1000):
+                stub_sb_append_string([sb, chunk], heap, [])

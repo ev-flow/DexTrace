@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
-import json
 import multiprocessing
 import os
 import signal
+import subprocess
+import sys
 from dataclasses import dataclass
 from os import PathLike
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -409,11 +410,12 @@ def _execute_method_worker(
 
 
 def _process_worker(conn, fn, fn_args) -> None:
-    """Run ``fn(*fn_args)`` and ship the outcome back over ``conn``.
+    """Run ``fn(*fn_args)`` and ship the result back over ``conn``.
 
     Module-level so it pickles for spawn-based start methods (macOS/Windows).
-    Sends ``("ok", value)`` on success and ``("err", None)`` on any exception —
-    the parent maps both the error tag and a missing message to ``None``.
+    Sends the return value on success, or ``None`` on any exception (including
+    an unpicklable result) — the parent treats a received ``None`` and a dead
+    worker identically, so no success/error tag is needed.
     """
     # Lead our own session/process group so the parent can later signal the
     # whole group and reap any grandchildren the worker spawns, not just us.
@@ -423,23 +425,22 @@ def _process_worker(conn, fn, fn_args) -> None:
         except OSError:
             pass
     try:
-        conn.send(("ok", fn(*fn_args)))
+        conn.send(fn(*fn_args))
     except Exception:
-        conn.send(("err", None))
+        conn.send(None)
     finally:
         conn.close()
 
 
 def _signal_worker_group(proc, sig) -> None:
-    """Send ``sig`` to the worker's process group (covers grandchildren).
+    """POSIX: send ``sig`` to the worker's process group (covers grandchildren).
 
-    The worker calls ``os.setsid()``, so on POSIX it leads a group whose id
-    equals its own pid. We signal the group *only* when that holds — a guard
-    that guarantees we never accidentally signal the parent's own group (e.g.
-    if ``setsid`` failed, or before it ran). Where group signalling is missing
-    (Windows) this is a no-op and the caller's per-process kill still applies.
+    The worker calls ``os.setsid()``, so it leads a group whose id equals its
+    own pid. We signal the group *only* when that holds — a guard that
+    guarantees we never accidentally signal the parent's own group (e.g. if
+    ``setsid`` failed, or before it ran).
     """
-    if proc.pid is None or not hasattr(os, "killpg") or not hasattr(os, "getpgid"):
+    if proc.pid is None:
         return
     try:
         if os.getpgid(proc.pid) == proc.pid:
@@ -448,15 +449,48 @@ def _signal_worker_group(proc, sig) -> None:
         pass  # already gone, or not its own group leader
 
 
+def _taskkill_tree(pid) -> None:
+    """Windows: terminate the whole process tree rooted at ``pid``.
+
+    ``taskkill /T`` walks child processes by parent pid (the Windows analogue
+    of a POSIX process-group kill), so grandchildren the worker spawned are
+    reaped too; ``/F`` forces it. taskkill ships with every Windows install.
+    """
+    if pid is None:
+        return
+    try:
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except (OSError, ValueError):
+        pass  # taskkill unavailable — proc.kill() still reaps the worker itself
+
+
 def _terminate_worker(proc) -> None:
-    """Force a runaway worker (and its descendants) down: SIGTERM, then SIGKILL."""
+    """Force a runaway worker *and its descendants* down — cross-platform.
+
+    POSIX (macOS/Linux): escalate over the worker's process group, SIGTERM then
+    SIGKILL. Windows: ``taskkill /F /T`` kills the process tree. On every
+    platform ``proc.terminate()``/``proc.kill()`` is the always-present
+    fallback that reaps at least the worker process itself.
+    """
     if not proc.is_alive():
         return
-    _signal_worker_group(proc, signal.SIGTERM)
-    proc.terminate()  # also signal the worker pid directly (Windows + race safety)
+
+    def signal_tree(sig) -> None:
+        if hasattr(os, "killpg"):  # POSIX: process-group kill
+            _signal_worker_group(proc, sig)
+        elif sys.platform == "win32":
+            _taskkill_tree(proc.pid)
+
+    signal_tree(signal.SIGTERM)
+    proc.terminate()  # signal the worker pid directly (fallback + race safety)
     proc.join(timeout=1)
     if proc.is_alive():
-        _signal_worker_group(proc, getattr(signal, "SIGKILL", signal.SIGTERM))
+        signal_tree(signal.SIGKILL)
         proc.kill()
         proc.join()
 
@@ -480,9 +514,9 @@ def _run_with_timeout(fn, fn_args, timeout_s: float) -> Optional[Any]:
         proc.start()
         child_conn.close()  # only the worker holds the send end now
         if parent_conn.poll(timeout_s):
-            status, value = parent_conn.recv()
+            value = parent_conn.recv()
             proc.join(timeout=1)  # worker is done; let it exit cleanly
-            return value if status == "ok" else None
+            return value
         return None  # deadline passed — worker is killed in finally
     except Exception:
         # Unpicklable fn/args under spawn (start() fails), a worker that died
@@ -525,9 +559,9 @@ def execute_method(
     :param args: Positional arguments to pass to the method (default: []).
     :param timeout_s: Per-call wall-clock timeout in seconds (default: 5.0).
     :param memory_limit_mb: Cap on the VM's heap allocation in MiB
-        (default: 1024). ``None`` disables the cap. Enforced cross-platform —
-        an over-budget allocation aborts the run (returning ``None``) before
-        the memory is committed.
+        (default: 1024). ``None`` or ``0`` (or any value <= 0) disables the cap.
+        Enforced cross-platform — an over-budget allocation aborts the run
+        (returning ``None``) before the memory is committed.
     :return: The method's return value, or ``None`` if the method is not found,
         execution raises, or the timeout/memory limit fires. Callers treat
         ``None`` as "could not resolve".

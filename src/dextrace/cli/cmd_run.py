@@ -229,7 +229,7 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
         trace_sink=_info if args.verbose else None,
         strict_stubs=args.strict_stubs,
         call_tree_trace=tree,
-        memory_limit_mb=(args.max_memory_mb if args.max_memory_mb > 0 else None),
+        memory_limit_mb=args.max_memory_mb,  # heap treats 0/<=0 as "no limit"
     )
 
     if args.verbose:

@@ -59,13 +59,16 @@ class ObjectHeap:
     def __init__(self, memory_limit_mb: Optional[int] = None) -> None:
         self._objects: Dict[int, HeapEntry] = {}
         self._next_handle: int = 1
-        # Predictive, cumulative allocation budget in *bytes*. ``None`` disables
-        # it (the default, so direct VM/heap use in tests is unaffected). When
+        # Predictive, cumulative allocation budget in *bytes*. ``None`` or any
+        # value <= 0 disables it (the default, so direct VM/heap use in tests is
+        # unaffected, and 0 is a uniform "no limit" sentinel for callers). When
         # set, each allocation is charged its real byte footprint *before* it
         # happens; once the running total would pass the limit the request is
         # rejected without ever committing the memory.
         self._max_bytes: Optional[int] = (
-            None if memory_limit_mb is None else int(memory_limit_mb) * 1024 * 1024
+            int(memory_limit_mb) * 1024 * 1024
+            if memory_limit_mb and memory_limit_mb > 0
+            else None
         )
         self._used_bytes: int = 0
 
@@ -75,6 +78,14 @@ class ObjectHeap:
         self._next_handle = 1
         self._used_bytes = 0
 
+    @staticmethod
+    def _value_bytes(value: Any) -> int:
+        """Real footprint of a heap value's payload (e.g. a string's length).
+
+        Single source of "what a value costs", shared by allocate/set_value.
+        """
+        return sys.getsizeof(value) if value is not None else 0
+
     def _charge(self, nbytes: int) -> None:
         """Reserve ``nbytes`` against the running total *before* allocating.
 
@@ -82,7 +93,8 @@ class ObjectHeap:
         request (e.g. ``new-array v, 2**40`` → ~8 TiB) is rejected up front
         instead of being allocated and then detected. The total accumulates
         across the whole run (reset per ``vm.run()``), so many small
-        allocations also trip the cap. No-op when no budget is configured.
+        allocations also trip the cap. No-op when no budget is configured, so
+        callers can charge unconditionally.
         """
         if self._max_bytes is None:
             return
@@ -96,10 +108,7 @@ class ObjectHeap:
 
     def allocate(self, class_desc: str, value: Any = None) -> int:
         """Allocate a new object of class_desc. Returns its handle (>= 1)."""
-        nbytes = self._ENTRY_OVERHEAD
-        if value is not None:
-            nbytes += sys.getsizeof(value)  # real footprint (e.g. string length)
-        self._charge(nbytes)
+        self._charge(self._ENTRY_OVERHEAD + self._value_bytes(value))
         handle = self._next_handle
         self._next_handle += 1
         self._objects[handle] = HeapEntry(class_desc=class_desc, value=value)
@@ -119,8 +128,9 @@ class ObjectHeap:
         if length < 0:
             raise DexTraceVMError(f"allocate_array: negative length {length}")
         # Real host cost of [0]*length is the list backbone: one pointer slot
-        # per element (the int 0 is shared), regardless of the Dalvik element
-        # width — that 8*length is what actually fills RAM. Charge it predictively.
+        # per element (the int 0 is shared), regardless of Dalvik element width
+        # — that 8*length is what fills RAM. Charge it predictively (the int
+        # math is cheap and _charge no-ops when unbounded).
         self._charge(self._LIST_OVERHEAD + self._SLOT_BYTES * length)
         handle = self._next_handle
         self._next_handle += 1
@@ -165,8 +175,18 @@ class ObjectHeap:
         Update the `value` slot of an existing heap entry. Used by stubs that
         mutate already-allocated objects (e.g. StringBuilder.<init> sets the
         initial string on a handle that new-instance created with value=None).
+
+        Replacing a value with a larger one is charged its *growth* against the
+        memory budget, so unbounded mutation (e.g. StringBuilder.append in a
+        loop) cannot bypass the cap that allocate/allocate_array enforce. Only
+        growth is charged — shrinking is free, keeping the cumulative-total
+        semantics. Over-budget growth raises before the value is stored.
         """
-        self._entry(handle).value = value
+        entry = self._entry(handle)
+        delta = self._value_bytes(value) - self._value_bytes(entry.value)
+        if delta > 0:  # only growth is charged; _charge no-ops when unbounded
+            self._charge(delta)
+        entry.value = value
 
     # ------------------------------------------------------------------
     # instance fields

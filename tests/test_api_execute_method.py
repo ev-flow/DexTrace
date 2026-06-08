@@ -27,7 +27,12 @@ from pathlib import Path
 
 import pytest
 
-from dextrace.api import _execute_method_worker, _run_with_timeout, execute_method
+from dextrace.api import (
+    _execute_method_worker,
+    _run_with_timeout,
+    _taskkill_tree,
+    execute_method,
+)
 
 SAMPLES = Path(__file__).parent / "fixtures" / "samples"
 CONST_RETURN = SAMPLES / "const_return.dex"
@@ -154,6 +159,24 @@ class TestTimeout:
             os.kill(grandchild_pid, signal.SIGKILL)  # don't leak from the test
         assert not alive, "grandchild survived the timeout (process group not reaped)"
 
+    def test_windows_tree_kill_issues_taskkill(self, monkeypatch):
+        """The Windows termination branch reaps the tree via `taskkill /F /T`.
+
+        taskkill exists only on Windows, but capturing the subprocess command
+        verifies the cross-platform path on any OS. Confirms grandchild reaping
+        is wired for Windows, not just POSIX process groups.
+        """
+        import dextrace.api as api
+
+        calls = []
+        monkeypatch.setattr(api.subprocess, "run", lambda cmd, **k: calls.append(cmd))
+
+        api._taskkill_tree(4321)
+        assert calls == [["taskkill", "/F", "/T", "/PID", "4321"]]
+
+        _taskkill_tree(None)  # no pid -> no command issued
+        assert len(calls) == 1
+
 
 class TestMemoryLimit:
     def test_limit_param_allows_normal_call(self):
@@ -164,6 +187,8 @@ class TestMemoryLimit:
         """
         assert execute_method(CONST_RETURN, CONST_RETURN_ENTRY, memory_limit_mb=1024) == 42
         assert execute_method(CONST_RETURN, CONST_RETURN_ENTRY, memory_limit_mb=None) == 42
+        # 0 disables the cap (consistent with the CLI), it does NOT reject all.
+        assert execute_method(CONST_RETURN, CONST_RETURN_ENTRY, memory_limit_mb=0) == 42
 
     def test_vm_memory_abort_maps_to_none(self, monkeypatch):
         """A VM memory-budget abort surfaces to the caller as None.
