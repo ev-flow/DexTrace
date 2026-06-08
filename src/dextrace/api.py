@@ -5,9 +5,16 @@
 
 from __future__ import annotations
 
-import concurrent.futures
 import json
+import multiprocessing
+import os
+import signal
 from dataclasses import dataclass
+
+try:
+    import resource  # POSIX-only; absent on Windows
+except ImportError:  # pragma: no cover
+    resource = None
 from os import PathLike
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -402,23 +409,123 @@ def _execute_method_worker(
     return None
 
 
-def _run_with_timeout(fn, fn_args, timeout_s: float) -> Optional[Any]:
+def _apply_memory_limit(memory_limit_mb: Optional[int]) -> None:
+    """Best-effort cap on the worker's address space via POSIX ``RLIMIT_AS``.
+
+    Untrusted DEX can allocate without bound; the wall-clock timeout does not
+    help because the host can hit the OOM killer *before* the deadline. Capping
+    address space makes an over-allocating worker raise ``MemoryError`` (which
+    the worker turns into a ``None`` result) instead of starving the host.
+
+    Enforcement is platform-dependent: it works on Linux (where Quark runs in
+    CI/containers); macOS rejects ``RLIMIT_AS`` and Windows has no ``resource``
+    module — on both we degrade to no limit and rely on the timeout backstop.
+    """
+    if not memory_limit_mb or resource is None:
+        return
+    limit = int(memory_limit_mb) * 1024 * 1024
+    try:
+        _soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+        new_hard = limit if hard == resource.RLIM_INFINITY else min(hard, limit)
+        resource.setrlimit(resource.RLIMIT_AS, (min(limit, new_hard), new_hard))
+    except (ValueError, OSError):
+        pass  # platform refuses RLIMIT_AS (e.g. macOS) — timeout still applies
+
+
+def _process_worker(conn, fn, fn_args, memory_limit_mb=None) -> None:
+    """Run ``fn(*fn_args)`` and ship the outcome back over ``conn``.
+
+    Module-level so it pickles for spawn-based start methods (macOS/Windows).
+    Applies the memory cap first, then sends ``("ok", value)`` on success and
+    ``("err", None)`` on any exception (including ``MemoryError`` from the cap) —
+    the parent maps both the error tag and a missing message to ``None``.
+    """
+    # Lead our own session/process group so the parent can later signal the
+    # whole group and reap any grandchildren the worker spawns, not just us.
+    if hasattr(os, "setsid"):
+        try:
+            os.setsid()
+        except OSError:
+            pass
+    try:
+        _apply_memory_limit(memory_limit_mb)
+        conn.send(("ok", fn(*fn_args)))
+    except Exception:
+        conn.send(("err", None))
+    finally:
+        conn.close()
+
+
+def _signal_worker_group(proc, sig) -> None:
+    """Send ``sig`` to the worker's process group (covers grandchildren).
+
+    The worker calls ``os.setsid()``, so on POSIX it leads a group whose id
+    equals its own pid. We signal the group *only* when that holds — a guard
+    that guarantees we never accidentally signal the parent's own group (e.g.
+    if ``setsid`` failed, or before it ran). Where group signalling is missing
+    (Windows) this is a no-op and the caller's per-process kill still applies.
+    """
+    if proc.pid is None or not hasattr(os, "killpg") or not hasattr(os, "getpgid"):
+        return
+    try:
+        if os.getpgid(proc.pid) == proc.pid:
+            os.killpg(proc.pid, sig)
+    except (OSError, ProcessLookupError):
+        pass  # already gone, or not its own group leader
+
+
+def _terminate_worker(proc) -> None:
+    """Force a runaway worker (and its descendants) down: SIGTERM, then SIGKILL."""
+    if not proc.is_alive():
+        return
+    _signal_worker_group(proc, signal.SIGTERM)
+    proc.terminate()  # also signal the worker pid directly (Windows + race safety)
+    proc.join(timeout=1)
+    if proc.is_alive():
+        _signal_worker_group(proc, getattr(signal, "SIGKILL", signal.SIGTERM))
+        proc.kill()
+        proc.join()
+
+
+def _run_with_timeout(
+    fn, fn_args, timeout_s: float, memory_limit_mb: Optional[int] = None
+) -> Optional[Any]:
     """Run ``fn(*fn_args)`` in a separate process; return ``None`` on timeout.
 
     A process boundary lets the caller return promptly even when the worker is
-    stuck in a pathological/untrusted DEX — the runaway process is abandoned
-    (``wait=False``) instead of blocking the caller. ``finally`` shuts the pool
-    down on every path (a ``return`` in ``try`` would skip an ``else`` branch,
-    leaking the executor on success). Args and the return value must be
-    picklable to cross the boundary; anything else degrades to ``None``.
+    stuck in a pathological/untrusted DEX. Unlike ``ProcessPoolExecutor``, which
+    only abandons a runaway worker (``shutdown(wait=False)`` cannot cancel a task
+    that has already started), this path *terminates* the worker on timeout —
+    ``terminate()`` then ``kill()`` — so no background process outlives the call.
+    ``memory_limit_mb`` caps the worker's address space (see
+    :func:`_apply_memory_limit`). Args and the return value must be picklable to
+    cross the boundary; anything else degrades to ``None``.
     """
-    executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)
+    ctx = multiprocessing.get_context("spawn")
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
+    proc = ctx.Process(
+        target=_process_worker, args=(child_conn, fn, fn_args, memory_limit_mb)
+    )
+
     try:
-        return executor.submit(fn, *fn_args).result(timeout=timeout_s)
-    except Exception:  # incl. TimeoutError (an OSError subclass since 3.11)
+        proc.start()
+        child_conn.close()  # only the worker holds the send end now
+        if parent_conn.poll(timeout_s):
+            status, value = parent_conn.recv()
+            proc.join(timeout=1)  # worker is done; let it exit cleanly
+            return value if status == "ok" else None
+        return None  # deadline passed — worker is killed in finally
+    except Exception:
+        # Unpicklable fn/args under spawn (start() fails), a worker that died
+        # mid-send (recv -> EOFError), or any IPC error: honor the public
+        # resolve-or-None contract instead of propagating to the caller.
         return None
     finally:
-        executor.shutdown(wait=False, cancel_futures=True)
+        child_conn.close()  # idempotent; closes it if start() never ran
+        parent_conn.close()
+        # Only a runaway/timed-out worker is still alive here; take its whole
+        # process group down so no child or grandchild outlives the call.
+        _terminate_worker(proc)
 
 
 def execute_method(
@@ -427,6 +534,7 @@ def execute_method(
     args: Optional[List] = None,
     *,
     timeout_s: float = 5.0,
+    memory_limit_mb: Optional[int] = 2048,
 ) -> Optional[Any]:
     """
     Execute a single Dalvik method in the DexTrace VM and return its value.
@@ -437,19 +545,28 @@ def execute_method(
     Accepts an APK or a raw DEX. DEX files are searched in stable order
     (classes.dex first); the method runs in the first DEX that contains it.
 
+    Because the method body is untrusted, execution is sandboxed in a child
+    process bounded on two axes: ``timeout_s`` (CPU/wall-clock) and
+    ``memory_limit_mb`` (address space, Linux-enforced — see
+    :func:`_apply_memory_limit`).
+
     :param target_path: Path to an APK or DEX file.
     :param entry_sig: Dalvik method signature, e.g.
         'Lcom/example/Foo;->bar()Ljava/lang/String;'
     :param args: Positional arguments to pass to the method (default: []).
     :param timeout_s: Per-call wall-clock timeout in seconds (default: 5.0).
+    :param memory_limit_mb: Per-call address-space cap in MiB for the worker
+        process (default: 2048). ``None`` disables the cap. Enforced on Linux;
+        a no-op where the platform refuses ``RLIMIT_AS`` (macOS) or lacks the
+        ``resource`` module (Windows).
     :return: The method's return value, or ``None`` if the method is not found,
-        execution raises, or the timeout fires. Callers treat ``None`` as
-        "could not resolve".
+        execution raises, or the timeout/memory limit fires. Callers treat
+        ``None`` as "could not resolve".
     """
     if args is None:
         args = []
 
     target = str(target_path)
     return _run_with_timeout(
-        _execute_method_worker, (target, entry_sig, args), timeout_s
+        _execute_method_worker, (target, entry_sig, args), timeout_s, memory_limit_mb
     )

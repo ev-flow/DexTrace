@@ -18,8 +18,15 @@ One-liner verification:
 
 from __future__ import annotations
 
+import multiprocessing
+import os
+import signal
+import sys
+import tempfile
 import time
 from pathlib import Path
+
+import pytest
 
 from dextrace.api import _run_with_timeout, execute_method
 
@@ -28,6 +35,38 @@ CONST_RETURN = SAMPLES / "const_return.dex"
 CONST_RETURN_ENTRY = "Lcom/example/ConstReturn;->main()I"
 FIB = SAMPLES / "fib_recursive.dex"
 FIB_ENTRY = "LFibonacciTest;->fib(I)I"
+
+
+# Module-level (picklable) helpers for the spawn-based timeout worker.
+def _add(a, b):
+    return a + b
+
+
+def _boom():
+    raise ValueError("worker exploded")
+
+
+def _alloc(n_bytes):
+    return len(bytearray(n_bytes))
+
+
+def _spawn_grandchild_and_hang(pidfile):
+    """Fork a long-sleeping grandchild, record its pid, then hang (force timeout)."""
+    pid = os.fork()
+    if pid == 0:  # grandchild
+        time.sleep(300)
+        os._exit(0)
+    with open(pidfile, "w") as f:
+        f.write(str(pid))
+    time.sleep(300)
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
 
 
 def test_fixtures_exist():
@@ -54,16 +93,80 @@ class TestExecuteMethod:
 
 
 class TestTimeout:
-    def test_timeout_returns_promptly(self):
-        """The timeout honors the deadline instead of waiting for the worker.
+    def test_timeout_returns_promptly_and_terminates_worker(self):
+        """The timeout honors the deadline AND leaves no worker running.
 
-        Regression for the original ThreadPoolExecutor-in-a-with-block, which
-        called shutdown(wait=True) on timeout and blocked until the worker
-        finished. The process-backed helper must return well before the 30s
-        sleep would complete.
+        Regression for two bugs: (1) the original ThreadPoolExecutor-in-a-with-
+        block called shutdown(wait=True) on timeout and blocked until the worker
+        finished; (2) the ProcessPoolExecutor follow-up returned promptly but
+        only abandoned the worker — shutdown(wait=False, cancel_futures=True)
+        cannot cancel a task that has already started, so a pathological DEX
+        left a background process running. The helper must now both return
+        early and terminate the worker, so no child outlives the call.
         """
         start = time.monotonic()
         result = _run_with_timeout(time.sleep, (30,), timeout_s=0.5)
         elapsed = time.monotonic() - start
+
         assert result is None
         assert elapsed < 10, f"timeout did not return early (took {elapsed:.1f}s)"
+        assert not multiprocessing.active_children(), "timed-out worker was left running"
+
+    def test_success_value_crosses_process_boundary(self):
+        """A normal return value survives the worker -> parent pipe round trip."""
+        assert _run_with_timeout(_add, (2, 3), timeout_s=5.0) == 5
+
+    def test_worker_exception_returns_none(self):
+        """An exception inside the worker degrades to None, not a crash."""
+        assert _run_with_timeout(_boom, (), timeout_s=5.0) is None
+
+    def test_unpicklable_arg_returns_none(self):
+        """Unpicklable args (spawn can't ship them) must honor the None contract.
+
+        Regression: an earlier process-backed version called proc.start()
+        outside the try, so the spawn-time pickling failure propagated to the
+        caller instead of degrading to None.
+        """
+        unpicklable = lambda x: x  # noqa: E731 — lambdas aren't picklable
+        assert _run_with_timeout(_add, (unpicklable, 1), timeout_s=5.0) is None
+
+    @pytest.mark.skipif(
+        not hasattr(os, "fork") or not hasattr(os, "setsid"),
+        reason="grandchild reaping needs POSIX fork + setsid",
+    )
+    def test_timeout_reaps_grandchild(self):
+        """A timeout takes down the worker's whole process group.
+
+        The worker calls os.setsid() and the parent group-kills it, so a
+        grandchild the worker spawned must not survive the call — killing only
+        the worker pid would leak it.
+        """
+        pidfile = tempfile.mktemp()
+        result = _run_with_timeout(_spawn_grandchild_and_hang, (pidfile,), timeout_s=1.0)
+        assert result is None
+
+        for _ in range(60):
+            if os.path.exists(pidfile):
+                break
+            time.sleep(0.05)
+        grandchild_pid = int(open(pidfile).read())
+
+        time.sleep(1.0)  # if not reaped, it would sleep for 300s
+        alive = _pid_alive(grandchild_pid)
+        if alive:
+            os.kill(grandchild_pid, signal.SIGKILL)  # don't leak from the test
+        assert not alive, "grandchild survived the timeout (process group not reaped)"
+
+
+class TestMemoryLimit:
+    def test_limit_allows_normal_call(self):
+        """Passing memory_limit_mb must not disturb a well-behaved call."""
+        assert _run_with_timeout(_add, (2, 3), timeout_s=5.0, memory_limit_mb=2048) == 5
+
+    @pytest.mark.skipif(
+        sys.platform != "linux", reason="RLIMIT_AS is only enforced on Linux"
+    )
+    def test_limit_blocks_overallocation(self):
+        """On Linux, an over-allocating worker hits the cap and degrades to None."""
+        one_gib = 1024 * 1024 * 1024
+        assert _run_with_timeout(_alloc, (one_gib,), timeout_s=10.0, memory_limit_mb=256) is None
