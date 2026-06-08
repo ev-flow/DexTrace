@@ -133,6 +133,7 @@ class DalvikVM:
         strict_stubs: bool = False,
         execution_trace: Optional[ExecutionTrace] = None,
         call_tree_trace: Optional[CallTreeTrace] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> None:
         self._parser = DexParser(dex_bytes)
         self._resolver = resolver
@@ -157,8 +158,10 @@ class DalvikVM:
         # create a new instance per vm.run() call.
         self._call_tree_trace = call_tree_trace
 
-        # Object heap and class hierarchy
-        self._heap = ObjectHeap()
+        # Object heap and class hierarchy. memory_limit_mb caps total heap
+        # allocation (predictively, at the allocation site) so untrusted DEX
+        # cannot exhaust memory; None leaves it unbounded.
+        self._heap = ObjectHeap(memory_limit_mb=memory_limit_mb)
         self._hierarchy = ClassHierarchy(dex_bytes, resolver)
 
         # Android-API stub registry (DI for tests; defaults to global REGISTRY)

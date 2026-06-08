@@ -21,8 +21,9 @@ Public surface: allocate, get_class, get_value.
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from dextrace.vm.errors import DexTraceVMError
 
@@ -49,17 +50,56 @@ class ObjectHeap:
     look up the runtime class for vtable dispatch.
     """
 
-    def __init__(self) -> None:
+    # Approximate fixed CPython footprints (bytes) so the running total tracks
+    # *actual* memory, not an abstract unit count.
+    _SLOT_BYTES = 8       # one pointer slot in a list ([0]*n stores n pointers)
+    _LIST_OVERHEAD = 56   # an empty CPython list object
+    _ENTRY_OVERHEAD = 64  # a HeapEntry (dataclass + its instance_fields dict)
+
+    def __init__(self, memory_limit_mb: Optional[int] = None) -> None:
         self._objects: Dict[int, HeapEntry] = {}
         self._next_handle: int = 1
+        # Predictive, cumulative allocation budget in *bytes*. ``None`` disables
+        # it (the default, so direct VM/heap use in tests is unaffected). When
+        # set, each allocation is charged its real byte footprint *before* it
+        # happens; once the running total would pass the limit the request is
+        # rejected without ever committing the memory.
+        self._max_bytes: Optional[int] = (
+            None if memory_limit_mb is None else int(memory_limit_mb) * 1024 * 1024
+        )
+        self._used_bytes: int = 0
 
     def reset(self) -> None:
         """Clear all allocations. Called at vm.run() entry to isolate runs."""
         self._objects.clear()
         self._next_handle = 1
+        self._used_bytes = 0
+
+    def _charge(self, nbytes: int) -> None:
+        """Reserve ``nbytes`` against the running total *before* allocating.
+
+        Pure integer arithmetic — no memory is touched — so a pathological
+        request (e.g. ``new-array v, 2**40`` → ~8 TiB) is rejected up front
+        instead of being allocated and then detected. The total accumulates
+        across the whole run (reset per ``vm.run()``), so many small
+        allocations also trip the cap. No-op when no budget is configured.
+        """
+        if self._max_bytes is None:
+            return
+        if self._used_bytes + nbytes > self._max_bytes:
+            raise DexTraceVMError(
+                f"memory budget exceeded: allocating {nbytes} bytes would pass "
+                f"the limit ({self._max_bytes // (1024 * 1024)} MiB; "
+                f"{self._used_bytes} already used)"
+            )
+        self._used_bytes += nbytes
 
     def allocate(self, class_desc: str, value: Any = None) -> int:
         """Allocate a new object of class_desc. Returns its handle (>= 1)."""
+        nbytes = self._ENTRY_OVERHEAD
+        if value is not None:
+            nbytes += sys.getsizeof(value)  # real footprint (e.g. string length)
+        self._charge(nbytes)
         handle = self._next_handle
         self._next_handle += 1
         self._objects[handle] = HeapEntry(class_desc=class_desc, value=value)
@@ -78,6 +118,10 @@ class ObjectHeap:
         """
         if length < 0:
             raise DexTraceVMError(f"allocate_array: negative length {length}")
+        # Real host cost of [0]*length is the list backbone: one pointer slot
+        # per element (the int 0 is shared), regardless of the Dalvik element
+        # width — that 8*length is what actually fills RAM. Charge it predictively.
+        self._charge(self._LIST_OVERHEAD + self._SLOT_BYTES * length)
         handle = self._next_handle
         self._next_handle += 1
         self._objects[handle] = HeapEntry(

@@ -21,20 +21,21 @@ from __future__ import annotations
 import multiprocessing
 import os
 import signal
-import sys
 import tempfile
 import time
 from pathlib import Path
 
 import pytest
 
-from dextrace.api import _run_with_timeout, execute_method
+from dextrace.api import _execute_method_worker, _run_with_timeout, execute_method
 
 SAMPLES = Path(__file__).parent / "fixtures" / "samples"
 CONST_RETURN = SAMPLES / "const_return.dex"
 CONST_RETURN_ENTRY = "Lcom/example/ConstReturn;->main()I"
 FIB = SAMPLES / "fib_recursive.dex"
 FIB_ENTRY = "LFibonacciTest;->fib(I)I"
+ARRAYS = SAMPLES / "arrays.dex"
+ARRAYS_ENTRY = "LArraysTest;->arraySum()I"
 
 
 # Module-level (picklable) helpers for the spawn-based timeout worker.
@@ -44,10 +45,6 @@ def _add(a, b):
 
 def _boom():
     raise ValueError("worker exploded")
-
-
-def _alloc(n_bytes):
-    return len(bytearray(n_bytes))
 
 
 def _spawn_grandchild_and_hang(pidfile):
@@ -159,14 +156,29 @@ class TestTimeout:
 
 
 class TestMemoryLimit:
-    def test_limit_allows_normal_call(self):
-        """Passing memory_limit_mb must not disturb a well-behaved call."""
-        assert _run_with_timeout(_add, (2, 3), timeout_s=5.0, memory_limit_mb=2048) == 5
+    def test_limit_param_allows_normal_call(self):
+        """A normal method runs fine under the (default) memory budget.
 
-    @pytest.mark.skipif(
-        sys.platform != "linux", reason="RLIMIT_AS is only enforced on Linux"
-    )
-    def test_limit_blocks_overallocation(self):
-        """On Linux, an over-allocating worker hits the cap and degrades to None."""
-        one_gib = 1024 * 1024 * 1024
-        assert _run_with_timeout(_alloc, (one_gib,), timeout_s=10.0, memory_limit_mb=256) is None
+        The budget itself is enforced inside the VM heap; see
+        tests/vm/test_heap_memory_budget.py for the allocation-level proof.
+        """
+        assert execute_method(CONST_RETURN, CONST_RETURN_ENTRY, memory_limit_mb=1024) == 42
+        assert execute_method(CONST_RETURN, CONST_RETURN_ENTRY, memory_limit_mb=None) == 42
+
+    def test_vm_memory_abort_maps_to_none(self, monkeypatch):
+        """A VM memory-budget abort surfaces to the caller as None.
+
+        The heap raises DexTraceVMError on an over-budget allocation (proven in
+        tests/vm/test_heap_memory_budget.py); here we verify the API worker's
+        last link — that such a VM error becomes None, not an exception. Driven
+        in-process via _execute_method_worker (monkeypatch cannot cross the
+        spawn boundary that execute_method uses).
+        """
+        from dextrace.vm.engine import DalvikVM
+        from dextrace.vm.errors import DexTraceVMError
+
+        def _raise_budget(self, *a, **k):
+            raise DexTraceVMError("memory budget exceeded (simulated)")
+
+        monkeypatch.setattr(DalvikVM, "run", _raise_budget)
+        assert _execute_method_worker(str(ARRAYS), ARRAYS_ENTRY, [], 1024) is None

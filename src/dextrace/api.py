@@ -10,11 +10,6 @@ import multiprocessing
 import os
 import signal
 from dataclasses import dataclass
-
-try:
-    import resource  # POSIX-only; absent on Windows
-except ImportError:  # pragma: no cover
-    resource = None
 from os import PathLike
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -385,12 +380,13 @@ def get_apk_permissions(apk_path: PathT) -> List[str]:
 # ----------------------------
 
 def _execute_method_worker(
-    target: str, entry_sig: str, args: List
+    target: str, entry_sig: str, args: List, memory_limit_mb: Optional[int]
 ) -> Optional[Any]:
     """Run ``entry_sig`` in the first DEX of ``target`` that defines it.
 
     Module-level (not a closure) so it can be pickled and dispatched to a
-    ``ProcessPoolExecutor`` worker on spawn-based platforms (macOS/Windows).
+    spawn-based worker process (macOS/Windows). ``memory_limit_mb`` bounds the
+    VM's heap allocation so an untrusted DEX cannot exhaust memory.
     """
     from dextrace.core.dex_resolver import DexResolver  # type: ignore
     from dextrace.core.dex_code_map import build_sig_to_codeoff_map  # type: ignore
@@ -402,42 +398,21 @@ def _execute_method_worker(
             sig_to_codeoff = build_sig_to_codeoff_map(dex_bytes, resolver)
             if entry_sig not in sig_to_codeoff:
                 continue
-            vm = DalvikVM(dex_bytes, resolver, sig_to_codeoff)
+            vm = DalvikVM(
+                dex_bytes, resolver, sig_to_codeoff,
+                memory_limit_mb=memory_limit_mb,
+            )
             return vm.run(entry_sig, args)
         except Exception:
             continue
     return None
 
 
-def _apply_memory_limit(memory_limit_mb: Optional[int]) -> None:
-    """Best-effort cap on the worker's address space via POSIX ``RLIMIT_AS``.
-
-    Untrusted DEX can allocate without bound; the wall-clock timeout does not
-    help because the host can hit the OOM killer *before* the deadline. Capping
-    address space makes an over-allocating worker raise ``MemoryError`` (which
-    the worker turns into a ``None`` result) instead of starving the host.
-
-    Enforcement is platform-dependent: it works on Linux (where Quark runs in
-    CI/containers); macOS rejects ``RLIMIT_AS`` and Windows has no ``resource``
-    module — on both we degrade to no limit and rely on the timeout backstop.
-    """
-    if not memory_limit_mb or resource is None:
-        return
-    limit = int(memory_limit_mb) * 1024 * 1024
-    try:
-        _soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-        new_hard = limit if hard == resource.RLIM_INFINITY else min(hard, limit)
-        resource.setrlimit(resource.RLIMIT_AS, (min(limit, new_hard), new_hard))
-    except (ValueError, OSError):
-        pass  # platform refuses RLIMIT_AS (e.g. macOS) — timeout still applies
-
-
-def _process_worker(conn, fn, fn_args, memory_limit_mb=None) -> None:
+def _process_worker(conn, fn, fn_args) -> None:
     """Run ``fn(*fn_args)`` and ship the outcome back over ``conn``.
 
     Module-level so it pickles for spawn-based start methods (macOS/Windows).
-    Applies the memory cap first, then sends ``("ok", value)`` on success and
-    ``("err", None)`` on any exception (including ``MemoryError`` from the cap) —
+    Sends ``("ok", value)`` on success and ``("err", None)`` on any exception —
     the parent maps both the error tag and a missing message to ``None``.
     """
     # Lead our own session/process group so the parent can later signal the
@@ -448,7 +423,6 @@ def _process_worker(conn, fn, fn_args, memory_limit_mb=None) -> None:
         except OSError:
             pass
     try:
-        _apply_memory_limit(memory_limit_mb)
         conn.send(("ok", fn(*fn_args)))
     except Exception:
         conn.send(("err", None))
@@ -487,9 +461,7 @@ def _terminate_worker(proc) -> None:
         proc.join()
 
 
-def _run_with_timeout(
-    fn, fn_args, timeout_s: float, memory_limit_mb: Optional[int] = None
-) -> Optional[Any]:
+def _run_with_timeout(fn, fn_args, timeout_s: float) -> Optional[Any]:
     """Run ``fn(*fn_args)`` in a separate process; return ``None`` on timeout.
 
     A process boundary lets the caller return promptly even when the worker is
@@ -497,15 +469,12 @@ def _run_with_timeout(
     only abandons a runaway worker (``shutdown(wait=False)`` cannot cancel a task
     that has already started), this path *terminates* the worker on timeout —
     ``terminate()`` then ``kill()`` — so no background process outlives the call.
-    ``memory_limit_mb`` caps the worker's address space (see
-    :func:`_apply_memory_limit`). Args and the return value must be picklable to
-    cross the boundary; anything else degrades to ``None``.
+    Args and the return value must be picklable to cross the boundary; anything
+    else degrades to ``None``.
     """
     ctx = multiprocessing.get_context("spawn")
     parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(
-        target=_process_worker, args=(child_conn, fn, fn_args, memory_limit_mb)
-    )
+    proc = ctx.Process(target=_process_worker, args=(child_conn, fn, fn_args))
 
     try:
         proc.start()
@@ -534,7 +503,7 @@ def execute_method(
     args: Optional[List] = None,
     *,
     timeout_s: float = 5.0,
-    memory_limit_mb: Optional[int] = 2048,
+    memory_limit_mb: Optional[int] = 1024,
 ) -> Optional[Any]:
     """
     Execute a single Dalvik method in the DexTrace VM and return its value.
@@ -547,18 +516,18 @@ def execute_method(
 
     Because the method body is untrusted, execution is sandboxed in a child
     process bounded on two axes: ``timeout_s`` (CPU/wall-clock) and
-    ``memory_limit_mb`` (address space, Linux-enforced — see
-    :func:`_apply_memory_limit`).
+    ``memory_limit_mb`` (heap allocation, enforced predictively inside the VM
+    at each allocation site, so it works on every platform).
 
     :param target_path: Path to an APK or DEX file.
     :param entry_sig: Dalvik method signature, e.g.
         'Lcom/example/Foo;->bar()Ljava/lang/String;'
     :param args: Positional arguments to pass to the method (default: []).
     :param timeout_s: Per-call wall-clock timeout in seconds (default: 5.0).
-    :param memory_limit_mb: Per-call address-space cap in MiB for the worker
-        process (default: 2048). ``None`` disables the cap. Enforced on Linux;
-        a no-op where the platform refuses ``RLIMIT_AS`` (macOS) or lacks the
-        ``resource`` module (Windows).
+    :param memory_limit_mb: Cap on the VM's heap allocation in MiB
+        (default: 1024). ``None`` disables the cap. Enforced cross-platform —
+        an over-budget allocation aborts the run (returning ``None``) before
+        the memory is committed.
     :return: The method's return value, or ``None`` if the method is not found,
         execution raises, or the timeout/memory limit fires. Callers treat
         ``None`` as "could not resolve".
@@ -568,5 +537,7 @@ def execute_method(
 
     target = str(target_path)
     return _run_with_timeout(
-        _execute_method_worker, (target, entry_sig, args), timeout_s, memory_limit_mb
+        _execute_method_worker,
+        (target, entry_sig, args, memory_limit_mb),
+        timeout_s,
     )
