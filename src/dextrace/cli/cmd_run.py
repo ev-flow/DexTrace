@@ -86,6 +86,18 @@ def register(p: argparse.ArgumentParser) -> None:
         ),
     )
     p.add_argument(
+        "--max-memory-mb",
+        type=int,
+        default=1024,
+        metavar="MB",
+        dest="max_memory_mb",
+        help=(
+            "Cap the VM heap allocation (MiB) so an untrusted DEX cannot "
+            "exhaust memory; an over-budget allocation aborts the run. "
+            "Default: 1024. Use 0 to disable."
+        ),
+    )
+    p.add_argument(
         "--dump-regs",
         action="store_true",
         help="Print non-zero register values after execution",
@@ -217,6 +229,7 @@ def run(  # pylint: disable=too-many-return-statements,too-many-branches
         trace_sink=_info if args.verbose else None,
         strict_stubs=args.strict_stubs,
         call_tree_trace=tree,
+        memory_limit_mb=args.max_memory_mb,  # heap treats 0/<=0 as "no limit"
     )
 
     if args.verbose:

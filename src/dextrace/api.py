@@ -5,7 +5,11 @@
 
 from __future__ import annotations
 
-import json
+import multiprocessing
+import os
+import signal
+import subprocess
+import sys
 from dataclasses import dataclass
 from os import PathLike
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -370,3 +374,205 @@ def get_apk_permissions(apk_path: PathT) -> List[str]:
     if isinstance(perms, list):
         return [str(x) for x in perms]
     return []
+
+
+# ----------------------------
+# VM execution (public + stable; Quark imports this)
+# ----------------------------
+
+def _execute_method_worker(
+    target: str, entry_sig: str, args: List, memory_limit_mb: Optional[int]
+) -> Optional[Any]:
+    """Run ``entry_sig`` in the first DEX of ``target`` that defines it.
+
+    Module-level (not a closure) so it can be pickled and dispatched to a
+    spawn-based worker process (macOS/Windows). ``memory_limit_mb`` bounds the
+    VM's heap allocation so an untrusted DEX cannot exhaust memory.
+    """
+    from dextrace.core.dex_resolver import DexResolver  # type: ignore
+    from dextrace.core.dex_code_map import build_sig_to_codeoff_map  # type: ignore
+    from dextrace.vm.engine import DalvikVM  # type: ignore
+
+    for _dex_name, dex_bytes in _load_dex_contexts(target):
+        try:
+            resolver = DexResolver(dex_bytes)
+            sig_to_codeoff = build_sig_to_codeoff_map(dex_bytes, resolver)
+            if entry_sig not in sig_to_codeoff:
+                continue
+            vm = DalvikVM(
+                dex_bytes, resolver, sig_to_codeoff,
+                memory_limit_mb=memory_limit_mb,
+            )
+            return vm.run(entry_sig, args)
+        except Exception:
+            continue
+    return None
+
+
+def _process_worker(conn, fn, fn_args) -> None:
+    """Run ``fn(*fn_args)`` and ship the result back over ``conn``.
+
+    Module-level so it pickles for spawn-based start methods (macOS/Windows).
+    Sends the return value on success, or ``None`` on any exception (including
+    an unpicklable result) — the parent treats a received ``None`` and a dead
+    worker identically, so no success/error tag is needed.
+    """
+    # Lead our own session/process group so the parent can later signal the
+    # whole group and reap any grandchildren the worker spawns, not just us.
+    if hasattr(os, "setsid"):
+        try:
+            os.setsid()
+        except OSError:
+            pass
+    try:
+        conn.send(fn(*fn_args))
+    except Exception:
+        conn.send(None)
+    finally:
+        conn.close()
+
+
+def _signal_worker_group(proc, sig) -> None:
+    """POSIX: send ``sig`` to the worker's process group (covers grandchildren).
+
+    The worker calls ``os.setsid()``, so it leads a group whose id equals its
+    own pid. We signal the group *only* when that holds — a guard that
+    guarantees we never accidentally signal the parent's own group (e.g. if
+    ``setsid`` failed, or before it ran).
+    """
+    if proc.pid is None:
+        return
+    try:
+        if os.getpgid(proc.pid) == proc.pid:
+            os.killpg(proc.pid, sig)
+    except (OSError, ProcessLookupError):
+        pass  # already gone, or not its own group leader
+
+
+def _taskkill_tree(pid) -> None:
+    """Windows: terminate the whole process tree rooted at ``pid``.
+
+    ``taskkill /T`` walks child processes by parent pid (the Windows analogue
+    of a POSIX process-group kill), so grandchildren the worker spawned are
+    reaped too; ``/F`` forces it. taskkill ships with every Windows install.
+    """
+    if pid is None:
+        return
+    try:
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except (OSError, ValueError):
+        pass  # taskkill unavailable — proc.kill() still reaps the worker itself
+
+
+def _terminate_worker(proc) -> None:
+    """Force a runaway worker *and its descendants* down — cross-platform.
+
+    POSIX (macOS/Linux): escalate over the worker's process group, SIGTERM then
+    SIGKILL. Windows: ``taskkill /F /T`` kills the process tree. On every
+    platform ``proc.terminate()``/``proc.kill()`` is the always-present
+    fallback that reaps at least the worker process itself.
+    """
+    if not proc.is_alive():
+        return
+
+    def signal_tree(sig) -> None:
+        if hasattr(os, "killpg"):  # POSIX: process-group kill
+            _signal_worker_group(proc, sig)
+        elif sys.platform == "win32":
+            _taskkill_tree(proc.pid)
+
+    signal_tree(signal.SIGTERM)
+    proc.terminate()  # signal the worker pid directly (fallback + race safety)
+    proc.join(timeout=1)
+    if proc.is_alive():
+        kill_signal = getattr(signal, "SIGKILL", signal.SIGTERM)
+        signal_tree(kill_signal)
+        proc.kill()
+        proc.join()
+
+
+def _run_with_timeout(fn, fn_args, timeout_s: float) -> Optional[Any]:
+    """Run ``fn(*fn_args)`` in a separate process; return ``None`` on timeout.
+
+    A process boundary lets the caller return promptly even when the worker is
+    stuck in a pathological/untrusted DEX. Unlike ``ProcessPoolExecutor``, which
+    only abandons a runaway worker (``shutdown(wait=False)`` cannot cancel a task
+    that has already started), this path *terminates* the worker on timeout —
+    ``terminate()`` then ``kill()`` — so no background process outlives the call.
+    Args and the return value must be picklable to cross the boundary; anything
+    else degrades to ``None``.
+    """
+    ctx = multiprocessing.get_context("spawn")
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
+    proc = ctx.Process(target=_process_worker, args=(child_conn, fn, fn_args))
+
+    try:
+        proc.start()
+        child_conn.close()  # only the worker holds the send end now
+        if parent_conn.poll(timeout_s):
+            value = parent_conn.recv()
+            proc.join(timeout=1)  # worker is done; let it exit cleanly
+            return value
+        return None  # deadline passed — worker is killed in finally
+    except Exception:
+        # Unpicklable fn/args under spawn (start() fails), a worker that died
+        # mid-send (recv -> EOFError), or any IPC error: honor the public
+        # resolve-or-None contract instead of propagating to the caller.
+        return None
+    finally:
+        child_conn.close()  # idempotent; closes it if start() never ran
+        parent_conn.close()
+        # Only a runaway/timed-out worker is still alive here; take its whole
+        # process group down so no child or grandchild outlives the call.
+        _terminate_worker(proc)
+
+
+def execute_method(
+    target_path: PathT,
+    entry_sig: str,
+    args: Optional[List] = None,
+    *,
+    timeout_s: float = 5.0,
+    memory_limit_mb: Optional[int] = 1024,
+) -> Optional[Any]:
+    """
+    Execute a single Dalvik method in the DexTrace VM and return its value.
+
+    This is the stable public wrapper over ``dextrace.vm.engine.DalvikVM`` —
+    callers (e.g. Quark) should import this instead of touching the VM directly.
+
+    Accepts an APK or a raw DEX. DEX files are searched in stable order
+    (classes.dex first); the method runs in the first DEX that contains it.
+
+    Because the method body is untrusted, execution is sandboxed in a child
+    process bounded on two axes: ``timeout_s`` (CPU/wall-clock) and
+    ``memory_limit_mb`` (heap allocation, enforced predictively inside the VM
+    at each allocation site, so it works on every platform).
+
+    :param target_path: Path to an APK or DEX file.
+    :param entry_sig: Dalvik method signature, e.g.
+        'Lcom/example/Foo;->bar()Ljava/lang/String;'
+    :param args: Positional arguments to pass to the method (default: []).
+    :param timeout_s: Per-call wall-clock timeout in seconds (default: 5.0).
+    :param memory_limit_mb: Cap on the VM's heap allocation in MiB
+        (default: 1024). ``None`` or ``0`` (or any value <= 0) disables the cap.
+        Enforced cross-platform — an over-budget allocation aborts the run
+        (returning ``None``) before the memory is committed.
+    :return: The method's return value, or ``None`` if the method is not found,
+        execution raises, or the timeout/memory limit fires. Callers treat
+        ``None`` as "could not resolve".
+    """
+    if args is None:
+        args = []
+
+    target = str(target_path)
+    return _run_with_timeout(
+        _execute_method_worker,
+        (target, entry_sig, args, memory_limit_mb),
+        timeout_s,
+    )

@@ -113,6 +113,51 @@ def stub_sb_tostring(
 # String helpers
 # ---------------------------------------------------------------------------
 
+# Android's new String(byte[]) uses the platform default charset, which is
+# UTF-8. Single source of truth for the default used when no charset is given.
+_DEFAULT_CHARSET = "utf-8"
+
+
+def _init_string_from_bytes(
+    heap, str_handle, arr_handle, charset: str = _DEFAULT_CHARSET
+) -> StubResult:
+    """Shared body for String.<init>([B...): decode a heap byte array into str_handle.
+
+    Dalvik byte arrays hold signed values, so each element is masked to a byte
+    before decoding. Defaults to UTF-8 (Android's platform default); falls back
+    to Latin-1 if the charset is unknown/invalid or the bytes are not valid in it.
+    """
+    if arr_handle == 0:
+        heap.set_value(str_handle, "")
+        return VOID
+    raw = bytes(b & 0xFF for b in heap.get_array(arr_handle))
+    try:
+        s = raw.decode(charset)
+    except (LookupError, UnicodeDecodeError):
+        s = raw.decode("latin-1")
+    heap.set_value(str_handle, s)
+    return VOID
+
+
+def stub_string_init_bytes(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
+    """String.<init>([B)V — construct String from raw byte array (default charset)."""
+    arr_handle = args[1] if len(args) > 1 else 0
+    return _init_string_from_bytes(heap, args[0], arr_handle)
+
+
+def stub_string_init_bytes_charset(
+    args: List[Any], heap, _trace: List[Dict[str, Any]]
+) -> StubResult:
+    """String.<init>([BLjava/lang/String;)V — byte array + charset name."""
+    arr_handle = args[1] if len(args) > 1 else 0
+    charset_handle = args[2] if len(args) > 2 else 0
+    if charset_handle:
+        charset = _str_val(heap, charset_handle)
+        return _init_string_from_bytes(heap, args[0], arr_handle, charset)
+    return _init_string_from_bytes(heap, args[0], arr_handle)
+
 
 def stub_string_equals(
     args: List[Any], heap, _trace: List[Dict[str, Any]]
@@ -238,6 +283,14 @@ register(f"{_SB}->append(I){_SB}", stub_sb_append_int)
 register(f"{_SB}->append(Ljava/lang/Object;){_SB}", stub_sb_append_object)
 register(f"{_SB}->toString()Ljava/lang/String;", stub_sb_tostring)
 
+register(
+    "Ljava/lang/String;-><init>([B)V",
+    stub_string_init_bytes,
+)
+register(
+    "Ljava/lang/String;-><init>([BLjava/lang/String;)V",
+    stub_string_init_bytes_charset,
+)
 register(
     "Ljava/lang/String;->equals(Ljava/lang/Object;)Z",
     stub_string_equals,
