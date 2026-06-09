@@ -490,7 +490,8 @@ def _terminate_worker(proc) -> None:
     proc.terminate()  # signal the worker pid directly (fallback + race safety)
     proc.join(timeout=1)
     if proc.is_alive():
-        signal_tree(signal.SIGKILL)
+        kill_signal = getattr(signal, "SIGKILL", signal.SIGTERM)
+        signal_tree(kill_signal)
         proc.kill()
         proc.join()
 
