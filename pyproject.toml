@@ -10,22 +10,27 @@ where = ["src"]
 
 [project]
 name = "dextrace"
-version = "25.10.1"
+version = "26.6.1"
 description = "DEX/APK analyzer"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "Quark Engine", email = "pulorsok@gmail.com" }]
-license = { text = "GNU General Public License v3 (GPLv3)" }
+authors = [
+  { name = "AnWei Kung", email = "sasakikung@gmail.com" },
+  { name = "ShengFone Lu", email = "cindejze412@gmail.com" },
+]
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 keywords = ["android", "dex", "apk", "dalvik", "xref", "static-analysis"]
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Topic :: Security",
   "Topic :: Software Development :: Libraries :: Python Modules"
 ]
 
 [project.urls]
 Homepage = "https://github.com/ev-flow/dextrace"
+Repository = "https://github.com/ev-flow/dextrace"
+Issues = "https://github.com/ev-flow/dextrace/issues"
 
 [project.scripts]
 dextrace = "dextrace.cli.main:main"
