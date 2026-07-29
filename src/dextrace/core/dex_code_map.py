@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import Dict, Iterable, Optional, Tuple
 
 from dextrace.core.dex_header import DexHeader
@@ -14,12 +15,26 @@ class DexFormatError(ValueError):
     """Raised when DEX format is invalid or truncated."""
 
 
+# Module-level LRU cache keyed by dex_bytes[8:32] — the DEX Adler-32 checksum (4 bytes
+# at offset 8) plus SHA-1 signature (20 bytes at offset 12). This 24-byte slice
+# uniquely identifies a DEX file regardless of object identity, so the key is safe
+# across APK boundaries and not vulnerable to id() reuse after GC.
+_MAX_CACHE_ENTRIES = 256
+_sig_to_codeoff_cache: OrderedDict[bytes, Dict[str, int]] = OrderedDict()
+
+
 def build_sig_to_codeoff_map(dex_bytes: bytes, resolver) -> Dict[str, int]:
     """
     Build map: method_signature -> code_off
     - method_signature example: Lx/y/Z;->m(II)Ljava/lang/String;
     - resolver must provide: get_method_sig(method_idx) -> str
     """
+    key = dex_bytes[8:32] if len(dex_bytes) >= 32 else dex_bytes
+    cached = _sig_to_codeoff_cache.get(key)
+    if cached is not None:
+        _sig_to_codeoff_cache.move_to_end(key)
+        return cached
+
     header = DexHeader.from_bytes(dex_bytes)
     size = len(dex_bytes)
 
@@ -36,6 +51,9 @@ def build_sig_to_codeoff_map(dex_bytes: bytes, resolver) -> Dict[str, int]:
         if sig:
             out[sig] = int(code_off)
 
+    if len(_sig_to_codeoff_cache) >= _MAX_CACHE_ENTRIES:
+        _sig_to_codeoff_cache.popitem(last=False)
+    _sig_to_codeoff_cache[key] = out
     return out
 
 
