@@ -28,6 +28,8 @@ class DexResolver:
         # allow DexParser or raw bytes
         if hasattr(dex_parser_or_bytes, "_data"):
             self._data = dex_parser_or_bytes._data  # DexParser internal
+        elif isinstance(dex_parser_or_bytes, bytes):
+            self._data = dex_parser_or_bytes  # avoid unnecessary copy
         else:
             self._data = bytes(dex_parser_or_bytes)
 
@@ -176,10 +178,11 @@ class DexResolver:
             return None
 
         # bounded scan until 0x00
-        end = p
         limit = min(self._size, p + 1024 * 1024)
-        while end < limit and self._data[end] != 0:
-            end += 1
+        try:
+            end = self._data.index(b"\x00", p, limit)
+        except ValueError:
+            end = limit
         if end >= self._size:
             self._string_cache[string_idx] = None
             return None
