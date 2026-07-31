@@ -28,6 +28,21 @@ def _align(off: int, a: int) -> int:
     return (off + (a - 1)) & ~(a - 1)
 
 
+def _pad4(data: bytearray, data_off: int) -> None:
+    while (data_off + len(data)) % 4 != 0:
+        data.append(0)
+
+
+def _string_data_item(s: str) -> bytes:
+    """Encode a string as a DEX string_data_item (uleb128 length + MUTF-8 + NUL)."""
+    b = s.encode("utf-8")
+    return _uleb128(len(s)) + b + b"\x00"
+
+
+def _map_item(t: int, size: int, offset: int) -> bytes:
+    return struct.pack("<HHII", t, 0, size, offset)
+
+
 def build_minimal_test_dex() -> bytes:
     """
     Build a minimal, valid DEX (dex\\n035) for deterministic unit tests.
@@ -60,12 +75,7 @@ def build_minimal_test_dex() -> bytes:
         "HELLO",   # const-string payload
     ]
 
-    def string_data_item(s: str) -> bytes:
-        # string_data_item:
-        #   uleb128 utf16_size
-        #   u1 data[] (MUTF-8), terminated by 0x00
-        b = s.encode("utf-8")
-        return _uleb128(len(s)) + b + b"\x00"
+    string_data_item = _string_data_item
 
     string_datas = [string_data_item(s) for s in strings]
     string_ids_size = len(strings)
@@ -146,8 +156,7 @@ def build_minimal_test_dex() -> bytes:
         data.extend(sd)
 
     # align for type_list (must be 4-byte aligned)
-    while (data_off + len(data)) % 4 != 0:
-        data.append(0)
+    _pad4(data, data_off)
 
     # type_list for proto1 params: [Ljava/lang/String;]
     type_list_off = data_off + len(data)
@@ -159,8 +168,7 @@ def build_minimal_test_dex() -> bytes:
     data.extend(struct.pack("<IHH", 1, param_type_idx, 0))
 
     # align for code_item (4-byte)
-    while (data_off + len(data)) % 4 != 0:
-        data.append(0)
+    _pad4(data, data_off)
 
     # code_item
     code_off = data_off + len(data)
@@ -220,13 +228,11 @@ def build_minimal_test_dex() -> bytes:
     data.extend(class_data)
 
     # align for map_list
-    while (data_off + len(data)) % 4 != 0:
-        data.append(0)
+    _pad4(data, data_off)
 
     map_off = data_off + len(data)
 
-    def map_item(t: int, size: int, offset: int) -> bytes:
-        return struct.pack("<HHII", t, 0, size, offset)
+    map_item = _map_item
 
     # map_list: include only what we actually laid out
     items = [
@@ -342,3 +348,239 @@ def build_minimal_test_dex() -> bytes:
     struct.pack_into("<I", blob, 8, checksum)
 
     return bytes(blob)
+
+
+def _build_dex_with_interfaces(interface_descs: List[str]) -> bytes:
+    """
+    Build a minimal DEX where LTest extends Object and implements interface_descs.
+    Used by build_minimal_test_dex_with_interface and build_minimal_test_dex_with_two_interfaces.
+    """
+    base_strings = [
+        "LTest;",
+        "Ljava/lang/Object;",
+        "Ljava/lang/String;",
+        "Ljava/lang/StringBuilder;",
+        "<init>",
+        "append",
+        "V",
+        "LL",
+        "HELLO",
+    ]
+    strings = list(base_strings)
+    for iface in interface_descs:
+        if iface not in strings:
+            strings.append(iface)
+
+    string_datas = [_string_data_item(s) for s in strings]
+    string_ids_size = len(strings)
+
+    base_type_descs = [
+        "LTest;",
+        "Ljava/lang/Object;",
+        "Ljava/lang/String;",
+        "Ljava/lang/StringBuilder;",
+        "V",
+    ]
+    type_descs = list(base_type_descs)
+    for iface in interface_descs:
+        if iface not in type_descs:
+            type_descs.append(iface)
+
+    type_ids = [strings.index(d) for d in type_descs]
+    type_ids_size = len(type_ids)
+
+    proto_ids_size = 2
+    proto0_shorty_idx = strings.index("V")
+    proto0_return_type_idx = type_descs.index("V")
+    proto0_parameters_off = 0
+    proto1_shorty_idx = strings.index("LL")
+    proto1_return_type_idx = type_descs.index("Ljava/lang/StringBuilder;")
+    proto1_parameters_off = 0  # placeholder
+
+    method_ids = [
+        (type_descs.index("Ljava/lang/Object;"), 0, strings.index("<init>")),
+        (type_descs.index("LTest;"), 0, strings.index("<init>")),
+        (type_descs.index("Ljava/lang/StringBuilder;"), 1, strings.index("append")),
+    ]
+    method_ids_size = len(method_ids)
+    class_defs_size = 1
+
+    header_size = 0x70
+    off = header_size
+
+    string_ids_off = off
+    off += string_ids_size * 4
+    type_ids_off = off
+    off += type_ids_size * 4
+    proto_ids_off = off
+    off += proto_ids_size * 12
+    field_ids_size = 0
+    field_ids_off = 0
+    method_ids_off = off
+    off += method_ids_size * 8
+    class_defs_off = off
+    off += class_defs_size * 32
+
+    data_off = _align(off, 4)
+
+    data = bytearray()
+
+    string_data_offs: List[int] = []
+    for sd in string_datas:
+        string_data_offs.append(data_off + len(data))
+        data.extend(sd)
+
+    _pad4(data, data_off)
+
+    # interface type_list (count=N entries, then pad to 4-byte boundary)
+    interfaces_off = 0
+    if interface_descs:
+        interfaces_off = data_off + len(data)
+        iface_idxes = [type_descs.index(d) for d in interface_descs]
+        iface_list = struct.pack("<I", len(iface_idxes))
+        for idx in iface_idxes:
+            iface_list += struct.pack("<H", idx)
+        data.extend(iface_list)
+
+    _pad4(data, data_off)
+
+    # proto1 params type_list: [Ljava/lang/String;]
+    type_list_off = data_off + len(data)
+    param_type_idx = type_descs.index("Ljava/lang/String;")
+    data.extend(struct.pack("<IHH", 1, param_type_idx, 0))
+
+    _pad4(data, data_off)
+
+    code_off = data_off + len(data)
+    hello_idx = strings.index("HELLO")
+    append_mid = 2
+    insns = [
+        0x1070, 0x0000, 0x0000,
+        0x011A, int(hello_idx) & 0xFFFF,
+        0x206E, int(append_mid) & 0xFFFF, 0x0010,
+        0x000E,
+    ]
+    code_item = (
+        struct.pack("<HHHHII", 2, 1, 2, 0, 0, len(insns))
+        + struct.pack("<" + "H" * len(insns), *insns)
+    )
+    data.extend(code_item)
+
+    class_data_off = data_off + len(data)
+    class_data = (
+        _uleb128(0) + _uleb128(0) + _uleb128(1) + _uleb128(0)
+        + _uleb128(1) + _uleb128(0x10001) + _uleb128(code_off)
+    )
+    data.extend(class_data)
+
+    _pad4(data, data_off)
+
+    map_off = data_off + len(data)
+
+    map_item = _map_item
+
+    if interface_descs:
+        type_list_count = 2
+        first_type_list_off = interfaces_off
+    else:
+        type_list_count = 1
+        first_type_list_off = type_list_off
+
+    items = [
+        map_item(0x0000, 1, 0),
+        map_item(0x0001, string_ids_size, string_ids_off),
+        map_item(0x0002, type_ids_size, type_ids_off),
+        map_item(0x0003, proto_ids_size, proto_ids_off),
+        map_item(0x0005, method_ids_size, method_ids_off),
+        map_item(0x0006, class_defs_size, class_defs_off),
+        map_item(0x1001, type_list_count, first_type_list_off),
+        map_item(0x2001, 1, code_off),
+        map_item(0x2000, 1, class_data_off),
+        map_item(0x2002, string_ids_size, string_data_offs[0]),
+        map_item(0x1000, 1, map_off),
+    ]
+    data.extend(struct.pack("<I", len(items)) + b"".join(items))
+
+    data_size = len(data)
+    file_size = data_off + data_size
+
+    string_id_items = b"".join(struct.pack("<I", o) for o in string_data_offs)
+    type_id_items = b"".join(struct.pack("<I", idx) for idx in type_ids)
+
+    proto1_parameters_off = type_list_off
+    proto_id_items = b"".join([
+        struct.pack("<III", proto0_shorty_idx, proto0_return_type_idx, proto0_parameters_off),
+        struct.pack("<III", proto1_shorty_idx, proto1_return_type_idx, proto1_parameters_off),
+    ])
+    method_id_items = b"".join(
+        struct.pack("<HHI", cls, proto, name) for cls, proto, name in method_ids
+    )
+
+    class_def_item = struct.pack(
+        "<IIIIIIII",
+        type_descs.index("LTest;"),
+        0x1,
+        type_descs.index("Ljava/lang/Object;"),
+        interfaces_off,
+        0xFFFFFFFF,
+        0,
+        class_data_off,
+        0,
+    )
+
+    header = bytearray(header_size)
+    header[0:8] = b"dex\n035\x00"
+    struct.pack_into("<I", header, 32, file_size)
+    struct.pack_into("<I", header, 36, header_size)
+    struct.pack_into("<I", header, 40, 0x12345678)
+    struct.pack_into("<I", header, 44, 0)
+    struct.pack_into("<I", header, 48, 0)
+    struct.pack_into("<I", header, 52, map_off)
+    struct.pack_into("<I", header, 56, string_ids_size)
+    struct.pack_into("<I", header, 60, string_ids_off)
+    struct.pack_into("<I", header, 64, type_ids_size)
+    struct.pack_into("<I", header, 68, type_ids_off)
+    struct.pack_into("<I", header, 72, proto_ids_size)
+    struct.pack_into("<I", header, 76, proto_ids_off)
+    struct.pack_into("<I", header, 80, field_ids_size)
+    struct.pack_into("<I", header, 84, field_ids_off)
+    struct.pack_into("<I", header, 88, method_ids_size)
+    struct.pack_into("<I", header, 92, method_ids_off)
+    struct.pack_into("<I", header, 96, class_defs_size)
+    struct.pack_into("<I", header, 100, class_defs_off)
+    struct.pack_into("<I", header, 104, data_size)
+    struct.pack_into("<I", header, 108, data_off)
+
+    blob = (
+        bytes(header)
+        + string_id_items
+        + type_id_items
+        + proto_id_items
+        + method_id_items
+        + class_def_item
+    )
+    if len(blob) > data_off:
+        raise RuntimeError("layout bug: fixed sections exceed data_off")
+    blob += b"\x00" * (data_off - len(blob))
+    blob += bytes(data)
+
+    if len(blob) != file_size:
+        raise RuntimeError(f"layout bug: file_size mismatch {len(blob)} != {file_size}")
+
+    sig = hashlib.sha1(blob[32:]).digest()
+    blob = bytearray(blob)
+    blob[12:32] = sig
+    checksum = zlib.adler32(blob[12:]) & 0xFFFFFFFF
+    struct.pack_into("<I", blob, 8, checksum)
+
+    return bytes(blob)
+
+
+def build_minimal_test_dex_with_interface() -> bytes:
+    """Build minimal DEX where LTest extends Object and implements LIFoo."""
+    return _build_dex_with_interfaces(["LIFoo;"])
+
+
+def build_minimal_test_dex_with_two_interfaces() -> bytes:
+    """Build minimal DEX where LTest extends Object and implements LIFoo and LIBar."""
+    return _build_dex_with_interfaces(["LIFoo;", "LIBar;"])
