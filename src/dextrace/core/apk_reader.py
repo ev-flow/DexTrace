@@ -11,6 +11,7 @@ Responsible only for:
 - reading raw file contents
 """
 
+import io
 import os
 import zipfile
 from typing import List, Tuple
@@ -23,7 +24,9 @@ class ApkReader:
         if not os.path.isfile(apk_path):
             raise FileNotFoundError(f"APK not found: {apk_path}")
         self.apk_path = apk_path
-        self._zip = zipfile.ZipFile(apk_path, "r")
+        with open(apk_path, "rb") as f:
+            raw = bytearray(f.read())
+        self._zip = zipfile.ZipFile(io.BytesIO(raw), "r")
 
     def list_entries(self) -> List[str]:
         """Return the list of entries inside the APK."""
