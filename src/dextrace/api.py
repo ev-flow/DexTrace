@@ -124,6 +124,7 @@ def read_all_dex_bytes(apk_path: PathT) -> List[bytes]:
 # DEX loading (internal)
 # ----------------------------
 
+@functools.lru_cache(maxsize=32)
 def _load_dex_contexts(target: str) -> List[Tuple[str, bytes]]:
     """
     Return list of (dex_name, dex_bytes).
