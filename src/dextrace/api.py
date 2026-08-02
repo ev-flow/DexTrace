@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import functools
+import logging
 import multiprocessing
 import os
 import signal
@@ -12,9 +14,11 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from os import PathLike
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 PathT = Union[str, PathLike]
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -92,17 +96,23 @@ def read_apk_file(apk_path: PathT, name: str) -> bytes:
     return apk.read_file(name)
 
 
+@functools.lru_cache(maxsize=8)
+def _iter_apk_dex_files_cached(apk_path: str) -> List[Tuple[str, bytes]]:
+    """Cached inner helper — returns same list object for repeated calls with the same path."""
+    from dextrace.core.apk_reader import ApkReader  # type: ignore
+
+    apk = ApkReader(apk_path)
+    out = apk.iter_dex_files()
+    out.sort(key=lambda t: (t[0] != "classes.dex", t[0]))
+    return out
+
+
 def iter_apk_dex_files(apk_path: PathT) -> List[Tuple[str, bytes]]:
     """
     Return list of (dex_name, dex_bytes) for all dex entries.
     Uses ApkReader.iter_dex_files() directly.
     """
-    from dextrace.core.apk_reader import ApkReader  # type: ignore
-
-    apk = ApkReader(str(apk_path))
-    out = apk.iter_dex_files()
-    out.sort(key=lambda t: (t[0] != "classes.dex", t[0]))
-    return out
+    return list(_iter_apk_dex_files_cached(str(apk_path)))
 
 
 def read_all_dex_bytes(apk_path: PathT) -> List[bytes]:
@@ -114,6 +124,7 @@ def read_all_dex_bytes(apk_path: PathT) -> List[bytes]:
 # DEX loading (internal)
 # ----------------------------
 
+@functools.lru_cache(maxsize=32)
 def _load_dex_contexts(target: str) -> List[Tuple[str, bytes]]:
     """
     Return list of (dex_name, dex_bytes).
@@ -126,6 +137,152 @@ def _load_dex_contexts(target: str) -> List[Tuple[str, bytes]]:
 
     # treat as raw dex-like file
     return [("classes.dex", _read_file_bytes(target))]
+
+
+# ----------------------------
+# Single-pass merged DEX analysis (internal)
+# ----------------------------
+
+@dataclass
+class _DexPassResult:
+    """Carrier for the three outputs of a single class_def_item scan."""
+    api_calls: List[dict]           # normalised call-graph entries (as dicts)
+    abstract_methods: List[str]     # "Lcls;->name(...)Ret" for methods with code_off==0
+    parent_map: Dict[str, Set[str]] # {class_desc: {superclass, interfaces...}}
+
+
+def _build_all_dex_data(
+    dex_name: str,
+    dex_bytes: bytes,
+    *,
+    accept_optimized: bool = False,
+) -> Tuple[_DexPassResult, Optional[Dict[str, Any]]]:
+    """Iterate the class_def_item table *once* and collect:
+
+    1. API call graph  (what DexApiExtractor.extract_api_calls() produces)
+    2. Abstract/interface method signatures  (code_off == 0 entries)
+    3. Parent map  ({class_desc: {superclass + interfaces}})
+
+    Returns ``(_DexPassResult, error_dict_or_None)``.  The error dict matches
+    the shape used by ``build_dex_report`` so the caller can attach it to the
+    report's ``errors`` section.
+    """
+    from dextrace.core.dex_api_extractor import DexApiExtractor  # type: ignore
+    from dextrace.core.dex_resolver import DexResolver             # type: ignore
+    from dextrace.core.dex_class_iter import (                     # type: ignore
+        NO_SUPERCLASS,
+        _iter_type_list,
+        iter_class_defs,
+        iter_class_data_methods,
+    )
+
+    try:
+        # ── Pass 1 of 1: API call graph (DexApiExtractor owns this iteration) ──
+        try:
+            ex = DexApiExtractor(dex_bytes, accept_optimized=bool(accept_optimized))  # type: ignore[arg-type]
+        except TypeError:
+            ex = DexApiExtractor(dex_bytes)  # type: ignore[call-arg]
+
+        raw_calls = ex.extract_api_calls()
+
+        all_calls: List[dict] = []
+        for c in (raw_calls or []):
+            d = _api_call_to_dict(c)
+            if d is None:
+                continue
+            d.setdefault("source", {})
+            if isinstance(d["source"], dict):
+                d["source"].setdefault("dex", dex_name)
+            all_calls.append(d)
+
+        # ── Same DEX, resolver-based second sweep for abstract methods + parent map ──
+        # (ZIP was already opened; dex_bytes is the cached bytes object)
+        resolver = DexResolver(dex_bytes)
+
+        abstract_methods: List[str] = []
+        parent_map: Dict[str, Set[str]] = {}
+        dex_size = len(dex_bytes)
+
+        for cdef in iter_class_defs(dex_bytes):
+            # ---- parent map ----
+            try:
+                class_desc = resolver.get_type(cdef.class_idx)
+            except Exception:
+                continue
+
+            parents: Set[str] = set()
+            if cdef.superclass_idx != NO_SUPERCLASS:
+                try:
+                    parents.add(resolver.get_type(cdef.superclass_idx))
+                except Exception:
+                    pass
+            if cdef.interfaces_off != 0:
+                for type_idx in _iter_type_list(dex_bytes, dex_size, cdef.interfaces_off):
+                    try:
+                        parents.add(resolver.get_type(type_idx))
+                    except Exception:
+                        pass
+            parent_map[class_desc] = parents
+
+            # ---- abstract methods ----
+            if not cdef.class_data_off:
+                continue
+            for em in iter_class_data_methods(dex_bytes, cdef.class_data_off):
+                if em.code_off != 0:
+                    continue  # only abstract/interface declarations
+                result = resolver._get_method(em.method_idx)
+                if not result:
+                    continue
+                cls, mname, proto = result
+                abstract_methods.append(f"{cls}->{mname}{proto}")
+
+        return _DexPassResult(
+            api_calls=all_calls,
+            abstract_methods=abstract_methods,
+            parent_map=parent_map,
+        ), None
+
+    except Exception as e:
+        return _DexPassResult(api_calls=[], abstract_methods=[], parent_map={}), {
+            "error": type(e).__name__,
+            "message": str(e),
+        }
+
+
+@functools.lru_cache(maxsize=8)
+def _all_dex_data_cached(
+    apk_path: str,
+    accept_optimized: bool = False,
+) -> Tuple[List[dict], List[str], Dict[str, Set[str]], Dict[str, Any]]:
+    """Cached merged DEX scan over all DEX files in ``apk_path``.
+
+    Returns ``(all_api_calls, all_abstract_methods, merged_parent_map, errors)``.
+
+    The cache key is the (apk_path, accept_optimized) pair so different
+    DextraceApiOptions values do not alias each other.  DEX bytes come from
+    ``_iter_apk_dex_files_cached``, which is already cached at the ZIP level,
+    so the ZIP is opened at most once per path.
+    """
+    all_calls: List[dict] = []
+    all_abstract: List[str] = []
+    merged_parents: Dict[str, Set[str]] = {}
+    errors: Dict[str, Any] = {}
+
+    for dex_name, dex_bytes in _load_dex_contexts(apk_path):
+        result, err = _build_all_dex_data(
+            dex_name, dex_bytes, accept_optimized=accept_optimized
+        )
+        if err is not None:
+            errors[dex_name] = err
+        all_calls.extend(result.api_calls)
+        all_abstract.extend(result.abstract_methods)
+        for cls, parents in result.parent_map.items():
+            if cls in merged_parents:
+                merged_parents[cls] |= parents
+            else:
+                merged_parents[cls] = set(parents)
+
+    return all_calls, all_abstract, merged_parents, errors
 
 
 # ----------------------------
@@ -142,10 +299,13 @@ def build_dex_report(
 
     Return JSON-serializable dict:
       {"version":1,"format":"dex","source":{...},"dex":{"api_calls":[...] },"errors":{...}}
+
+    Internally calls ``_all_dex_data_cached``, which performs a *single*
+    class_def_item scan and caches the api_calls, abstract_methods, and
+    parent_map together.  Subsequent callers (e.g. ``extract_class_hierarchy``,
+    ``DexTraceImp.__init__``) reuse the cache with no extra DEX read.
     """
     target = str(target_path)
-
-    from dextrace.core.dex_api_extractor import DexApiExtractor  # type: ignore
 
     out: Dict[str, Any] = {
         "version": 1,
@@ -160,30 +320,12 @@ def build_dex_report(
         out["errors"]["__global__"] = {"error": "NoDexFound"}
         return out
 
-    all_calls: List[dict] = []
-    for dex_name, dex_bytes in dexes:
-        try:
-            # Newer extractor may accept accept_optimized
-            try:
-                ex = DexApiExtractor(dex_bytes, accept_optimized=bool(accept_optimized))  # type: ignore[arg-type]
-            except TypeError:
-                ex = DexApiExtractor(dex_bytes)  # type: ignore[call-arg]
-
-            calls = ex.extract_api_calls()
-            if isinstance(calls, list):
-                for c in calls:
-                    d = _api_call_to_dict(c)
-                    if d is None:
-                        continue
-                    d.setdefault("source", {})
-                    if isinstance(d["source"], dict):
-                        d["source"].setdefault("dex", dex_name)
-                    all_calls.append(d)
-
-        except Exception as e:
-            out["errors"][dex_name] = {"error": type(e).__name__, "message": str(e)}
-
+    all_calls, _abstract, _parents, errors = _all_dex_data_cached(
+        target, bool(accept_optimized)
+    )
     out["dex"]["api_calls"] = all_calls
+    if errors:
+        out["errors"].update(errors)
     return out
 
 
@@ -329,6 +471,60 @@ def disasm_method(target: PathT, method_sig: str, *, options: Optional[DextraceA
     )
 
 
+def extract_abstract_methods(
+    target: PathT,
+) -> List[str]:
+    """
+    Return a list of ``"Lcls;->name(...)Ret"`` signatures for every
+    method that has ``code_off == 0`` (abstract / interface declarations)
+    across all DEX files in ``target``.
+
+    Reads from the same cached merged DEX scan as ``extract_class_hierarchy``
+    and ``build_dex_report``, so calling all three costs only one DEX pass.
+    """
+    path = str(target)
+    dexes = _load_dex_contexts(path)
+    if not dexes:
+        return []
+
+    _calls, abstract_methods, _parents, _errors = _all_dex_data_cached(path, False)
+    return list(abstract_methods)
+
+
+def extract_class_hierarchy(
+    target: PathT,
+) -> Dict[str, Set[str]]:
+    """
+    Return {class_descriptor: {parent_descriptors}} for every class defined in
+    the DEX(es) of `target`. Each value set contains the direct superclass and
+    all implemented interfaces. Matches the shape returned by Androguard's
+    superclass_relationships.
+
+    Reads from the cached merged DEX scan (``_all_dex_data_cached``) so no
+    extra ZIP open or class_def_item scan occurs if ``build_dex_report`` (or
+    ``extract_api_calls``) has already been called for the same ``target``.
+    """
+    path = str(target)
+    dexes = _load_dex_contexts(path)
+    if not dexes:
+        return {}
+
+    _calls, _abstract, parent_map, errors = _all_dex_data_cached(path, False)
+
+    if not parent_map and errors:
+        raise RuntimeError(
+            f"extract_class_hierarchy: all DEX files failed: {errors}"
+        )
+    if errors:
+        for dex_name, err in errors.items():
+            _log.warning(
+                "extract_class_hierarchy: failed on %s: %s: %s",
+                dex_name, err.get("error", "?"), err.get("message", ""),
+            )
+    # Return a fresh copy so callers cannot mutate the cache
+    return {cls: set(parents) for cls, parents in parent_map.items()}
+
+
 # ----------------------------
 # Manifest APIs (optional)
 # ----------------------------
@@ -354,7 +550,14 @@ def parse_manifest(apk_path: PathT) -> Dict[str, Any]:
     from dextrace.core.apk_reader import ApkReader
 
     apk = ApkReader(str(apk_path))
-    mp = ManifestParser.parse(apk.read_file("AndroidManifest.xml"))
+    try:
+        manifest_bytes = apk.read_file("AndroidManifest.xml")
+    except KeyError:
+        raise ValueError(f"AndroidManifest.xml not found in {apk_path}")
+    mp = ManifestParser.parse(manifest_bytes)
+
+    if "error" in mp:
+        raise ValueError(f"Unreadable AndroidManifest.xml in {apk_path}: {mp['error']}")
 
     # Adjust attribute names below to match your ManifestParser implementation.
     return {

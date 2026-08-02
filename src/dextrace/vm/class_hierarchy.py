@@ -31,6 +31,7 @@ from typing import Dict, Optional, Set, Tuple
 
 from dextrace.core.dex_class_iter import (
     NO_SUPERCLASS,
+    _iter_type_list,
     iter_class_data_methods,
     iter_class_defs,
 )
@@ -66,6 +67,61 @@ _JAVA_BUILTIN_SUPERCLASS: Dict[str, Optional[str]] = {
     "Ljava/io/FileNotFoundException;": "Ljava/io/IOException;",
     "Ljava/io/InterruptedIOException;": "Ljava/io/IOException;",
 }
+
+
+def _build_superclass_map(
+    dex_bytes: bytes, resolver
+) -> Tuple[Dict[str, Optional[str]], Dict[str, int]]:
+    """Return (superclass_map, data_off_map) for every class defined in dex_bytes.
+
+    superclass_map: {class_desc: superclass_desc_or_None}
+    data_off_map:   {class_desc: class_data_off}
+    """
+    superclass: Dict[str, Optional[str]] = {}
+    data_offs: Dict[str, int] = {}
+    for cdef in iter_class_defs(dex_bytes):
+        try:
+            class_desc = resolver.get_type(cdef.class_idx)
+        except Exception:
+            continue
+        if cdef.superclass_idx == NO_SUPERCLASS:
+            superclass[class_desc] = None
+        else:
+            try:
+                superclass[class_desc] = resolver.get_type(cdef.superclass_idx)
+            except Exception:
+                # Superclass resolve failed; record class with None so it stays
+                # visible — Quark's is_subtype() sees it with no known parent,
+                # which is safer than silently omitting it.
+                superclass[class_desc] = None
+        data_offs[class_desc] = cdef.class_data_off
+    return superclass, data_offs
+
+
+def _build_full_parent_map(
+    dex_bytes: bytes, resolver
+) -> Dict[str, Set[str]]:
+    """Return {class_desc: {all direct parent descs}} — superclass + interfaces."""
+    result: Dict[str, Set[str]] = {}
+    for cdef in iter_class_defs(dex_bytes):
+        try:
+            class_desc = resolver.get_type(cdef.class_idx)
+        except Exception:
+            continue
+        parents: Set[str] = set()
+        if cdef.superclass_idx != NO_SUPERCLASS:
+            try:
+                parents.add(resolver.get_type(cdef.superclass_idx))
+            except Exception:
+                pass
+        if cdef.interfaces_off != 0:
+            for type_idx in _iter_type_list(dex_bytes, len(dex_bytes), cdef.interfaces_off):
+                try:
+                    parents.add(resolver.get_type(type_idx))
+                except Exception:
+                    pass
+        result[class_desc] = parents
+    return result
 
 
 class ClassHierarchy:
@@ -156,26 +212,15 @@ class ClassHierarchy:
     # ------------------------------------------------------------------
 
     def _build(self, dex_bytes: bytes, resolver) -> None:
-        # Step 1: collect class info from class_def_items
+        # Single pass: collect superclass map and class_data_off simultaneously.
+        superclass_map, data_off_map = _build_superclass_map(dex_bytes, resolver)
+        self._superclass.update(superclass_map)
+
         # Maps class_desc → (superclass_desc_or_None, class_data_off)
-        class_info: Dict[str, Tuple[Optional[str], int]] = {}
-
-        for cdef in iter_class_defs(dex_bytes):
-            try:
-                class_desc = resolver.get_type(cdef.class_idx)
-            except Exception:
-                continue
-
-            if cdef.superclass_idx == NO_SUPERCLASS:
-                super_desc: Optional[str] = None
-            else:
-                try:
-                    super_desc = resolver.get_type(cdef.superclass_idx)
-                except Exception:
-                    super_desc = None
-
-            class_info[class_desc] = (super_desc, cdef.class_data_off)
-            self._superclass[class_desc] = super_desc
+        class_info: Dict[str, Tuple[Optional[str], int]] = {
+            desc: (super_desc, data_off_map[desc])
+            for desc, super_desc in superclass_map.items()
+        }
 
         # Step 2: DFS topological order — superclass processed before subclass
         visited: Set[str] = set()

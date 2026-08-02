@@ -22,6 +22,7 @@ NO_SUPERCLASS: int = 0xFFFFFFFF
 class ClassDefItem:
     class_idx: int
     superclass_idx: int  # NO_SUPERCLASS if no explicit superclass
+    interfaces_off: int  # 0 = no interfaces; points to type_list in DEX
     class_data_off: int  # 0 if class has no body (interface/abstract stub)
 
 
@@ -63,14 +64,16 @@ def iter_class_defs(dex_bytes: bytes) -> Iterable[ClassDefItem]:
 
         class_idx = _u32(dex_bytes, size, off)
         superclass_idx = _u32(dex_bytes, size, off + 8)
+        interfaces_off = _u32(dex_bytes, size, off + 12)
         class_data_off = _u32(dex_bytes, size, off + 24)
 
-        if class_idx is None or superclass_idx is None or class_data_off is None:
+        if class_idx is None or superclass_idx is None or interfaces_off is None or class_data_off is None:
             break
 
         yield ClassDefItem(
             class_idx=int(class_idx),
             superclass_idx=int(superclass_idx),
+            interfaces_off=int(interfaces_off),
             class_data_off=int(class_data_off),
         )
 
@@ -170,6 +173,19 @@ def iter_class_data_methods(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _iter_type_list(data: bytes, size: int, off: int) -> Iterable[int]:
+    """Yield type_idx from a type_list at `off`. type_list: u32 count + u16[count] items."""
+    count = _u32(data, size, off)
+    if count is None:
+        return
+    max_count = (size - off - 4) // 2
+    if count > max_count:
+        return
+    for i in range(int(count)):
+        item_off = off + 4 + i * 2
+        yield struct.unpack_from("<H", data, item_off)[0]
 
 
 def _u32(data: bytes, size: int, off: int) -> Optional[int]:

@@ -14,6 +14,23 @@ from ..errors import BadAxmlFormat
 
 # ======== Android AXML Constants ========
 
+# Fallback table: Android framework attribute resource ID → attribute name.
+# Used when the string pool entry for an attribute name is empty (e.g. APKs
+# built by non-standard toolchains or using anti-analysis tricks that blank
+# out string pool entries for framework attribute names).
+_ANDROID_RES_ATTR_NAMES: Dict[int, str] = {
+    0x01010003: "name",
+    0x0101021b: "name",
+    0x01010001: "label",
+    0x01010002: "icon",
+    0x01010020: "process",
+    0x01010021: "permission",
+    0x01010024: "authorities",
+    0x0101021c: "value",
+    0x01010270: "targetSdkVersion",
+    0x0101027b: "roundIcon",
+}
+
 RES_NULL_TYPE = 0x0000
 RES_STRING_POOL_TYPE = 0x0001
 RES_XML_TYPE = 0x0003
@@ -156,8 +173,12 @@ class AxmlReader:
     def get_string(self, index: int) -> Optional[str]:
         if index < 0 or index >= self._sp_count:
             return None
+        if index >= len(self._sp_offsets):
+            return None
 
         str_off = self._sp_data_off + self._sp_offsets[index]
+        if str_off + 2 > self._size:
+            return None
 
         if self._sp_utf8:
             # UTF-8 模式
@@ -238,7 +259,10 @@ class AxmlReader:
                 tag = self.get_string(chunk.name) or "?"
                 attrs: Dict[str, str] = {}
                 for rv in self.get_attributes(chunk):
-                    key = self.get_string(rv.name) or "?"
+                    key = self.get_string(rv.name)
+                    if (not key or not key.strip("\x00")) and rv.name < len(self._res_ids):
+                        key = _ANDROID_RES_ATTR_NAMES.get(self._res_ids[rv.name])
+                    key = key or "?"
                     val = self._decode_attr_value(rv)
                     attrs[key] = val
                 element = ET.Element(tag, attrs)

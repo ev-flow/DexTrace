@@ -11,6 +11,23 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from .dex_header import DexHeader
 
+# Precomputed frozenset of all 2-unit Dalvik opcodes — avoids rebuilding a
+# mutable set inside _insn_width_units() on every one of the ~1.7M calls.
+_WIDTH_2_OPCODES: frozenset = frozenset([
+    0x02, 0x05, 0x08,                        # move/from16, move-wide/from16, move-object/from16
+    0x13, 0x15, 0x16, 0x19, 0x1C,            # const/16, const/high16, const-wide/16, const-wide/high16, const-class
+    0x1A, 0x1F, 0x20, 0x22,                  # const-string, check-cast(21c), instance-of, new-instance
+    0x23,                                     # new-array (22c)
+    *range(0x2D, 0x32),                      # cmp* (23x)
+    0x29,                                     # goto/16 (20t)
+    *range(0x32, 0x3E),                      # if-* (22t/21t)
+    *range(0x44, 0x52),                      # aget/aput (23x)
+    *range(0x52, 0x60),                      # iget/iput (22c)
+    *range(0x60, 0x6E),                      # sget/sput (21c)
+    *range(0x90, 0xB0),                      # binary arithmetic (23x)
+    *range(0xD0, 0xE3),                      # lit16/lit8 family (22s/22b)
+])
+
 
 class DexFormatError(ValueError):
     """Raised when DEX format is invalid or truncated."""
@@ -328,6 +345,7 @@ class DexApiExtractor:
             0x03, 0x06, 0x09,        # move/16, move-wide/16, move-object/16 (32x)
             0x14, 0x17,              # const (31i), const-wide/32 (31i)
             0x1B,                    # const-string/jumbo (31c)
+            0x24, 0x25,              # filled-new-array (35c), filled-new-array/range (3rc)
             0x26,                    # fill-array-data (31t)
             0x2A,                    # goto/32 (30t)
             0x2B, 0x2C,              # packed-switch, sparse-switch (31t)
@@ -344,46 +362,7 @@ class DexApiExtractor:
         ):
             return 1
 
-        width2 = set()
-
-        # move/from16, move-wide/from16, move-object/from16 (22x)
-        width2.update([0x02, 0x05, 0x08])
-
-        # move-result*, return*, throw (11x) are 1; don't add
-
-        # const/4 is 1; const/16, const-wide/16, const/high16 etc are 2
-        width2.update([0x13, 0x15, 0x16, 0x19, 0x1C, 0x1D])
-
-        # const-string, const-class, check-cast, instance-of, new-instance (21c / 22c)
-        width2.update([0x1A, 0x1C, 0x1F, 0x20, 0x22])
-
-        # new-array, filled-new-array (22c/35c) -> new-array is 2, filled-new-array is 3 (0x24 handled by default 1; you can add if needed)
-        width2.update([0x23])
-
-        # iget/iput (22c)
-        width2.update(list(range(0x52, 0x60)))
-
-        # sget/sput (21c)
-        width2.update(list(range(0x60, 0x6E)))
-
-        # invoke-xxx are 3 already
-
-        # if-* (22t / 21t)
-        width2.update(list(range(0x32, 0x3E)))
-
-        # goto/16 (20t)
-        width2.update([0x29])
-
-        # aget/aput (23x)
-        width2.update(list(range(0x44, 0x52)))
-
-        # arithmetic 23x / 12x mix; include common 23x comparisons
-        width2.update(list(range(0x2D, 0x32)))  # cmpl/cmpg/cmp-long etc are 2
-
-        # add-int/lit16 etc (22s) and lit8 (22b)
-        width2.update(list(range(0xD0, 0xE3)))  # lit16/lit8 family are 2
-
-        if opcode in width2:
+        if opcode in _WIDTH_2_OPCODES:
             return 2
 
         # default
@@ -543,10 +522,11 @@ class DexApiExtractor:
             return None
 
         # Scan until 0x00 terminator (bounded)
-        end = start
         limit = min(self._size, start + 1024 * 1024)  # hard safety cap
-        while end < limit and self._data[end] != 0:
-            end += 1
+        try:
+            end = self._data.index(b"\x00", start, limit)
+        except ValueError:
+            end = limit
 
         if end >= self._size:
             self._string_cache[string_idx] = None
