@@ -51,6 +51,19 @@ class DexResolver:
             raise DexFormatError(f"Invalid string_idx={string_idx}")
         return s
 
+    def iter_strings(self):
+        """
+        Yield every string in this DEX's string_ids table, in index order.
+
+        This is the raw string pool: type descriptors, method/field names,
+        and shorty descriptors are interleaved with literal string constants
+        (matches what androguard's DalvikVMFormat.get_strings() returns).
+        """
+        for idx in range(int(self._hdr.string_ids_size)):
+            s = self._get_string(idx)
+            if s is not None:
+                yield s
+
     def get_type(self, type_idx: int) -> str:
         s = self._get_type(type_idx)
         if s is None:
