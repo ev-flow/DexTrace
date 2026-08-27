@@ -145,10 +145,12 @@ def _load_dex_contexts(target: str) -> List[Tuple[str, bytes]]:
 
 @dataclass
 class _DexPassResult:
-    """Carrier for the three outputs of a single class_def_item scan."""
+    """Carrier for the outputs of a single class_def_item scan."""
     api_calls: List[dict]           # normalised call-graph entries (as dicts)
     abstract_methods: List[str]     # "Lcls;->name(...)Ret" for methods with code_off==0
+    concrete_methods: List[str]     # "Lcls;->name(...)Ret" for methods with code_off!=0
     parent_map: Dict[str, Set[str]] # {class_desc: {superclass, interfaces...}}
+    strings: List[str]              # raw string_ids pool contents, index order
 
 
 def _build_all_dex_data(
@@ -161,7 +163,10 @@ def _build_all_dex_data(
 
     1. API call graph  (what DexApiExtractor.extract_api_calls() produces)
     2. Abstract/interface method signatures  (code_off == 0 entries)
-    3. Parent map  ({class_desc: {superclass + interfaces}})
+    3. Concrete method signatures  (code_off != 0 entries, including methods
+       with no outgoing/incoming calls, invisible to the API call graph)
+    4. Parent map  ({class_desc: {superclass + interfaces}})
+    5. The raw string_ids pool (every string literal, type, and member name)
 
     Returns ``(_DexPassResult, error_dict_or_None)``.  The error dict matches
     the shape used by ``build_dex_report`` so the caller can attach it to the
@@ -200,8 +205,10 @@ def _build_all_dex_data(
         resolver = DexResolver(dex_bytes)
 
         abstract_methods: List[str] = []
+        concrete_methods: List[str] = []
         parent_map: Dict[str, Set[str]] = {}
         dex_size = len(dex_bytes)
+        strings = list(resolver.iter_strings())
 
         for cdef in iter_class_defs(dex_bytes):
             # ---- parent map ----
@@ -228,22 +235,29 @@ def _build_all_dex_data(
             if not cdef.class_data_off:
                 continue
             for em in iter_class_data_methods(dex_bytes, cdef.class_data_off):
-                if em.code_off != 0:
-                    continue  # only abstract/interface declarations
                 result = resolver._get_method(em.method_idx)
                 if not result:
                     continue
                 cls, mname, proto = result
-                abstract_methods.append(f"{cls}->{mname}{proto}")
+                sig = f"{cls}->{mname}{proto}"
+                if em.code_off == 0:
+                    abstract_methods.append(sig)  # abstract/interface declaration
+                else:
+                    concrete_methods.append(sig)
 
         return _DexPassResult(
             api_calls=all_calls,
             abstract_methods=abstract_methods,
+            concrete_methods=concrete_methods,
             parent_map=parent_map,
+            strings=strings,
         ), None
 
     except Exception as e:
-        return _DexPassResult(api_calls=[], abstract_methods=[], parent_map={}), {
+        return _DexPassResult(
+            api_calls=[], abstract_methods=[], concrete_methods=[],
+            parent_map={}, strings=[],
+        ), {
             "error": type(e).__name__,
             "message": str(e),
         }
@@ -253,10 +267,11 @@ def _build_all_dex_data(
 def _all_dex_data_cached(
     apk_path: str,
     accept_optimized: bool = False,
-) -> Tuple[List[dict], List[str], Dict[str, Set[str]], Dict[str, Any]]:
+) -> Tuple[List[dict], List[str], List[str], Dict[str, Set[str]], List[str], Dict[str, Any]]:
     """Cached merged DEX scan over all DEX files in ``apk_path``.
 
-    Returns ``(all_api_calls, all_abstract_methods, merged_parent_map, errors)``.
+    Returns ``(all_api_calls, all_abstract_methods, all_concrete_methods,
+    merged_parent_map, all_strings, errors)``.
 
     The cache key is the (apk_path, accept_optimized) pair so different
     DextraceApiOptions values do not alias each other.  DEX bytes come from
@@ -265,7 +280,9 @@ def _all_dex_data_cached(
     """
     all_calls: List[dict] = []
     all_abstract: List[str] = []
+    all_concrete: List[str] = []
     merged_parents: Dict[str, Set[str]] = {}
+    all_strings: List[str] = []
     errors: Dict[str, Any] = {}
 
     for dex_name, dex_bytes in _load_dex_contexts(apk_path):
@@ -276,13 +293,15 @@ def _all_dex_data_cached(
             errors[dex_name] = err
         all_calls.extend(result.api_calls)
         all_abstract.extend(result.abstract_methods)
+        all_concrete.extend(result.concrete_methods)
+        all_strings.extend(result.strings)
         for cls, parents in result.parent_map.items():
             if cls in merged_parents:
                 merged_parents[cls] |= parents
             else:
                 merged_parents[cls] = set(parents)
 
-    return all_calls, all_abstract, merged_parents, errors
+    return all_calls, all_abstract, all_concrete, merged_parents, all_strings, errors
 
 
 # ----------------------------
@@ -320,7 +339,7 @@ def build_dex_report(
         out["errors"]["__global__"] = {"error": "NoDexFound"}
         return out
 
-    all_calls, _abstract, _parents, errors = _all_dex_data_cached(
+    all_calls, _abstract, _concrete, _parents, _strings, errors = _all_dex_data_cached(
         target, bool(accept_optimized)
     )
     out["dex"]["api_calls"] = all_calls
@@ -487,8 +506,50 @@ def extract_abstract_methods(
     if not dexes:
         return []
 
-    _calls, abstract_methods, _parents, _errors = _all_dex_data_cached(path, False)
+    _calls, abstract_methods, _concrete, _parents, _strings, _errors = _all_dex_data_cached(path, False)
     return list(abstract_methods)
+
+
+def extract_declared_methods(
+    target: PathT,
+) -> List[str]:
+    """
+    Return a list of ``"Lcls;->name(...)Ret"`` signatures for every method
+    with ``code_off != 0`` (a real implementation) across all DEX files in
+    ``target``, including methods that never appear in the API call graph
+    (no outgoing calls of their own, and never invoked from elsewhere in
+    the same DEX(es) via a visible ``invoke-*`` instruction).
+
+    Reads from the same cached merged DEX scan as ``extract_abstract_methods``
+    and ``build_dex_report``, so calling all of them costs only one DEX pass.
+    """
+    path = str(target)
+    dexes = _load_dex_contexts(path)
+    if not dexes:
+        return []
+
+    _calls, _abstract, concrete_methods, _parents, _strings, _errors = _all_dex_data_cached(path, False)
+    return list(concrete_methods)
+
+
+def extract_strings(
+    target: PathT,
+) -> List[str]:
+    """
+    Return every string in the string_ids pool across all DEX files in
+    ``target``, in encounter order (duplicates across DEX files included).
+
+    This is the raw string pool (type descriptors, method/field names, and
+    literal string constants interleaved), matching what androguard's
+    ``DalvikVMFormat.get_strings()`` returns.
+    """
+    path = str(target)
+    dexes = _load_dex_contexts(path)
+    if not dexes:
+        return []
+
+    _calls, _abstract, _concrete, _parents, strings, _errors = _all_dex_data_cached(path, False)
+    return list(strings)
 
 
 def extract_class_hierarchy(
@@ -509,7 +570,7 @@ def extract_class_hierarchy(
     if not dexes:
         return {}
 
-    _calls, _abstract, parent_map, errors = _all_dex_data_cached(path, False)
+    _calls, _abstract, _concrete, parent_map, _strings, errors = _all_dex_data_cached(path, False)
 
     if not parent_map and errors:
         raise RuntimeError(
